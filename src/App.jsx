@@ -279,7 +279,7 @@ function parseFile(data){
 /* ═══════════════════════════════════════════════════════════════
    EXPORTS
    ═══════════════════════════════════════════════════════════════ */
-function exportPDF(results,matrix,buydown,parAnalysis,config,params,lenders,view,hxN){
+function exportPDF(results,matrix,buydown,config,params,lenders,view,hxN){
   const hx=results.find(r=>r.lender===hxN);const best=results[0];
   const gap=hx?.ok&&best?.ok?(hx.net-best.net).toFixed(3):"N/A";
   const ts=new Date().toLocaleString();
@@ -402,115 +402,8 @@ function exportPDF(results,matrix,buydown,parAnalysis,config,params,lenders,view
     html+=`</tbody></table>`;
   }
 
-  // Par Rate Analysis
-  if (parAnalysis && parAnalysis.competitors.length) {
-    html+=`<div class="page-break"></div>`;
-    html+=`<h1>PAR RATE COMPARATIVE ANALYSIS</h1>`;
-    html+=`<div class="sub">${config.label} · ${ts}</div>`;
-    html+=`<div class="narrative"><strong>Methodology:</strong> For each FICO/LTV intersection, the engine identifies the HX par rate (the coupon where HX net price is closest to 100.000). It then calculates every competitor's net price at that same rate with all scenario LLPAs applied. The differential shows where HX is better priced (green/positive) vs where the competitor has an advantage (red/negative).</div>`;
 
-    // Scenario params for context
-    html+=`<div class="params">`;
-    [["Purpose",params.purpose],["Lock",params.lock+" Day"],["Income",params.incomeDoc],["Occupancy",params.occupancy],["Property",params.propertyType]].forEach(([k,v])=>{html+=`<div class="param"><b>${k}:</b> ${v}</div>`;});
-    if(params.dscr) html+=`<div class="param"><b>DSCR:</b> ${params.dscr}</div><div class="param"><b>PPP:</b> ${params.ppp}</div>`;
-    html+=`</div>`;
-
-    for (const compName of parAnalysis.competitors) {
-      // Compute summary stats
-      const diffs = config.ltvs.flatMap(ltv=>config.ficos.map(fico=>parAnalysis.grid[`${ltv}_${fico}`]?.competitors?.[compName]?.diff)).filter(d=>d!=null);
-      const wins=diffs.filter(d=>d>0).length;
-      const losses=diffs.filter(d=>d<0).length;
-      const ties=diffs.filter(d=>d===0).length;
-      const avgDiff=diffs.length?+(diffs.reduce((s,d)=>s+d,0)/diffs.length).toFixed(3):0;
-      const worstDiff=diffs.length?Math.min(...diffs):0;
-      const bestDiff=diffs.length?Math.max(...diffs):0;
-      const winPct=diffs.length?Math.round(wins/diffs.length*100):0;
-
-      html+=`<h2>HX vs ${compName}</h2>`;
-
-      // Summary KPIs
-      html+=`<div class="summary-grid">`;
-      [
-        {l:"WIN RATE",v:winPct+"%",c:winPct>=50?"#006633":"#cc2244"},
-        {l:"HX WINS",v:wins,c:"#006633"},
-        {l:"HX LOSSES",v:losses,c:"#cc2244"},
-        {l:"TIES",v:ties,c:"#666"},
-        {l:"AVG DIFFERENTIAL",v:(avgDiff>0?"+":"")+avgDiff.toFixed(3),c:avgDiff>=0?"#006633":"#cc2244"},
-        {l:"BEST ADVANTAGE",v:"+"+bestDiff.toFixed(3),c:"#006633"},
-        {l:"WORST GAP",v:worstDiff.toFixed(3),c:"#cc2244"},
-        {l:"SCENARIOS",v:diffs.length,c:"#333"},
-      ].forEach(({l,v,c})=>{
-        html+=`<div class="summary-box"><div class="summary-label">${l}</div><div class="summary-value" style="color:${c}">${v}</div></div>`;
-      });
-      html+=`</div>`;
-
-      // Price Differential Matrix (the main visual)
-      html+=`<h3>Net Price Differential — HX minus ${compName}</h3>`;
-      html+=`<table><thead><tr><th style="text-align:left">LTV \\ FICO</th>`;
-      config.ficos.forEach(f=>{html+=`<th>${f}</th>`;});
-      html+=`</tr></thead><tbody>`;
-      config.ltvs.forEach(ltv=>{
-        html+=`<tr><td style="font-weight:700;text-align:left;background:#f0f0f0">${ltv}%</td>`;
-        config.ficos.forEach(fico=>{
-          const d=parAnalysis.grid[`${ltv}_${fico}`];
-          const comp=d?.competitors?.[compName];
-          const diff=comp?.diff;
-          if(diff!=null){
-            const cls=diff>0?"par-cell-pos":diff<0?"par-cell-neg":"par-cell-neutral";
-            html+=`<td class="${cls}">${(diff>0?"+":"")+diff.toFixed(3)}</td>`;
-          } else {
-            html+=`<td class="par-cell-neutral">N/A</td>`;
-          }
-        });
-        html+=`</tr>`;
-      });
-      html+=`</tbody></table>`;
-
-      // Side-by-side: HX Par Rate + HX Net + Competitor Net
-      html+=`<div class="dual-grid">`;
-
-      // Left: HX Par Rate
-      html+=`<div><h3>HX Par Rate</h3><table class="mini-table"><thead><tr><th style="text-align:left">LTV\\FICO</th>`;
-      config.ficos.forEach(f=>{html+=`<th>${f}</th>`;});
-      html+=`</tr></thead><tbody>`;
-      config.ltvs.forEach(ltv=>{
-        html+=`<tr><td style="font-weight:700;text-align:left">${ltv}%</td>`;
-        config.ficos.forEach(fico=>{
-          const d=parAnalysis.grid[`${ltv}_${fico}`];
-          html+=`<td>${d?.parRate?d.parRate.toFixed(3)+"%":"—"}</td>`;
-        });
-        html+=`</tr>`;
-      });
-      html+=`</tbody></table></div>`;
-
-      // Right: HX Net vs Competitor Net
-      html+=`<div><h3>Net Price Comparison @ HX Par</h3><table class="mini-table"><thead><tr><th style="text-align:left">LTV\\FICO</th>`;
-      config.ficos.forEach(f=>{html+=`<th colspan="2">${f}</th>`;});
-      html+=`</tr><tr><th></th>`;
-      config.ficos.forEach(()=>{html+=`<th style="background:#006633;font-size:6px">HX</th><th style="background:#cc2244;font-size:6px">${compName.slice(0,8)}</th>`;});
-      html+=`</tr></thead><tbody>`;
-      config.ltvs.forEach(ltv=>{
-        html+=`<tr><td style="font-weight:700;text-align:left">${ltv}%</td>`;
-        config.ficos.forEach(fico=>{
-          const d=parAnalysis.grid[`${ltv}_${fico}`];
-          const comp=d?.competitors?.[compName];
-          const hxBetter=comp?.diff!=null&&comp.diff>0;
-          const compBetter=comp?.diff!=null&&comp.diff<0;
-          html+=`<td style="font-weight:${hxBetter?700:400};${hxBetter?"background:#e6fff2;":""}">${d?.hxNet?d.hxNet.toFixed(2):"—"}</td>`;
-          html+=`<td style="font-weight:${compBetter?700:400};${compBetter?"background:#ffe6ea;":""}">${comp?.net?comp.net.toFixed(2):"—"}</td>`;
-        });
-        html+=`</tr>`;
-      });
-      html+=`</tbody></table></div></div>`;
-
-      // Page break between competitors
-      if (parAnalysis.competitors.indexOf(compName) < parAnalysis.competitors.length - 1) {
-        html+=`<div class="page-break"></div>`;
-      }
-    }
-  }
-
-  html+=`<div class="footer"><span>HomeXpress Mortgage · Pricing Comparison Engine · Confidential</span><span>${ts}</span></div></body></html>`;
+    html+=`<div class="footer"><span>HomeXpress Mortgage · Pricing Comparison Engine · Confidential</span><span>${ts}</span></div></body></html>`;
   const win=window.open("","_blank");win.document.write(html);win.document.close();setTimeout(()=>{win.print();},500);
 }
 
@@ -520,6 +413,126 @@ function exportXLSX(results,params,best){
   results.forEach((r,i)=>{const row=[r.ok?i+1:"N/A",r.lender,r.base];cats.forEach(c=>{row.push(r.adjustments?.filter(a=>a.cat===c).reduce((s,a)=>s+a.value,0)||0);});row.push(r.totalAdj,r.net,r.ok?+(r.net-bv).toFixed(3):"N/A");d.push(row);});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(d),"Ranking");
   XLSX.writeFile(wb,`comparison_${params.rate}_${params.fico}_${params.ltv}.xlsx`);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   PAR ANALYSIS — EXCLUSIVE PDF REPORT
+   ═══════════════════════════════════════════════════════════════ */
+function exportParPDF(parAnalysis, config, params, lenders, hxN) {
+  if (!parAnalysis) return;
+  const ts = new Date().toLocaleString();
+  const competitors = parAnalysis.competitors;
+  const allDiffs = []; const ficoWins = {}; const ltvWins = {}; const overallStats = {};
+  config.ficos.forEach(f => { ficoWins[f] = { w:0,l:0,td:0,n:0 }; });
+  config.ltvs.forEach(l => { ltvWins[l] = { w:0,l:0,td:0,n:0 }; });
+
+  for (const cn of competitors) {
+    const diffs = [];
+    for (const ltv of config.ltvs) for (const fico of config.ficos) {
+      const d = parAnalysis.grid[`${ltv}_${fico}`]?.competitors?.[cn]?.diff;
+      if (d != null) { diffs.push(d); allDiffs.push({d,fico,ltv,cn});
+        if(d>0){ficoWins[fico].w++;ltvWins[ltv].w++;}else if(d<0){ficoWins[fico].l++;ltvWins[ltv].l++;}
+        ficoWins[fico].td+=d;ficoWins[fico].n++;ltvWins[ltv].td+=d;ltvWins[ltv].n++;
+      }
+    }
+    const w=diffs.filter(d=>d>0).length,l=diffs.filter(d=>d<0).length;
+    overallStats[cn]={w,l,t:diffs.filter(d=>d===0).length,avg:diffs.length?+(diffs.reduce((s,d)=>s+d,0)/diffs.length).toFixed(3):0,best:diffs.length?Math.max(...diffs):0,worst:diffs.length?Math.min(...diffs):0,wp:diffs.length?Math.round(w/diffs.length*100):0,n:diffs.length};
+  }
+  const fr=config.ficos.map(f=>({f,...ficoWins[f],avg:ficoWins[f].n?+(ficoWins[f].td/ficoWins[f].n).toFixed(3):0})).sort((a,b)=>b.avg-a.avg);
+  const lr=config.ltvs.map(l=>({l,...ltvWins[l],avg:ltvWins[l].n?+(ltvWins[l].td/ltvWins[l].n).toFixed(3):0})).sort((a,b)=>b.avg-a.avg);
+  const tw=Object.values(overallStats).reduce((s,c)=>s+c.w,0),tl=Object.values(overallStats).reduce((s,c)=>s+c.l,0),tn=Object.values(overallStats).reduce((s,c)=>s+c.n,0);
+  const oa=allDiffs.length?+(allDiffs.reduce((s,d)=>s+d.d,0)/allDiffs.length).toFixed(3):0;
+  const owp=tn?Math.round(tw/tn*100):0;
+  const threat=Object.entries(overallStats).sort((a,b)=>a[1].avg-b[1].avg)[0];
+
+  let h=`<html><head><style>
+    @page{margin:25px 30px;size:landscape;}body{font-family:'Inter',Arial,sans-serif;color:#1a1a1a;margin:0;padding:30px 40px;}
+    h1{font-size:24px;color:#000;margin:0;letter-spacing:3px;text-transform:uppercase;font-weight:800;}
+    h2{font-size:14px;color:#000;margin:28px 0 8px;letter-spacing:2px;text-transform:uppercase;border-bottom:2px solid #000;padding-bottom:5px;font-weight:700;}
+    h3{font-size:11px;color:#444;margin:16px 0 6px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;}
+    .sub{font-size:9px;color:#999;margin:4px 0 20px;letter-spacing:2px;text-transform:uppercase;}
+    .exec{background:#f7f7f7;border:1px solid #e0e0e0;border-left:4px solid #00b894;padding:14px 18px;margin:16px 0;font-size:11px;line-height:1.8;color:#333;border-radius:2px;}
+    .exec strong{color:#000;}
+    table{width:100%;border-collapse:collapse;font-size:9px;margin:6px 0;font-family:'Consolas',monospace;}
+    th{background:#111;color:#fff;padding:6px 7px;text-align:center;font-size:8px;text-transform:uppercase;letter-spacing:1px;}
+    td{padding:5px 7px;border-bottom:1px solid #eee;text-align:center;}tr:nth-child(even){background:#f8f9fa;}
+    .pos{background:#e6fff2;color:#006633;font-weight:700;}.neg{background:#ffe6ea;color:#cc2244;font-weight:700;}.neutral{color:#999;}
+    .kr{display:flex;gap:10px;margin:14px 0;}.k{border:1px solid #e0e0e0;padding:12px 16px;flex:1;border-radius:2px;text-align:center;}
+    .kl{font-size:7px;text-transform:uppercase;letter-spacing:2px;color:#999;font-weight:700;}.kv{font-size:24px;font-weight:800;margin-top:4px;font-family:'Consolas',monospace;}.ks{font-size:8px;color:#999;margin-top:2px;}
+    .sg{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;margin:8px 0;}
+    .sb{border:1px solid #e8e8e8;padding:8px 10px;border-radius:2px;text-align:center;}
+    .sl{font-size:7px;letter-spacing:1.5px;color:#999;text-transform:uppercase;font-weight:600;}.sv{font-size:16px;font-weight:800;margin-top:2px;font-family:'Consolas',monospace;}
+    .dual{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:8px 0;}.mini th{padding:4px 5px;font-size:7px;}.mini td{padding:3px 5px;font-size:8px;}
+    .params{display:flex;gap:16px;margin:10px 0;font-size:9px;flex-wrap:wrap;}.param b{font-weight:700;}
+    .footer{margin-top:24px;padding-top:8px;border-top:2px solid #000;font-size:8px;color:#999;display:flex;justify-content:space-between;letter-spacing:1px;text-transform:uppercase;}
+    .page-break{page-break-before:always;}
+  </style></head><body>`;
+
+  // COVER
+  h+=`<h1>Par Rate Comparative Analysis</h1><div class="sub">${config.label} · ${ts}</div>`;
+  h+=`<div class="exec"><strong>Executive Summary:</strong> Across ${tn} scenario comparisons against ${competitors.length} competitor(s), HomeXpress wins <strong>${owp}%</strong> of matchups with an average price advantage of <strong>${oa>=0?"+":""}${oa}</strong> points. HX is strongest at <strong>FICO ${fr[0].f}</strong> (avg +${fr[0].avg}) and <strong>${lr[0].l}% LTV</strong> (avg +${lr[0].avg}).`;
+  if(fr[fr.length-1].avg<0) h+=` Vulnerability at <strong>FICO ${fr[fr.length-1].f}</strong> (avg ${fr[fr.length-1].avg}) and <strong>${lr[lr.length-1].l}% LTV</strong> (avg ${lr[lr.length-1].avg}).`;
+  if(threat) h+=` Primary threat: <strong>${threat[0]}</strong> (${threat[1].wp}% HX win rate).`;
+  h+=`</div>`;
+
+  h+=`<div class="params">`;
+  [["Purpose",params.purpose],["Lock",params.lock+" Day"],["Income",params.incomeDoc],["Occupancy",params.occupancy],["Property",params.propertyType],["Loan","$"+parseInt(params.loanAmount||0).toLocaleString()]].forEach(([k,v])=>{h+=`<div class="param"><b>${k}:</b> ${v}</div>`;});
+  if(params.dscr)h+=`<div class="param"><b>DSCR:</b> ${params.dscr}</div><div class="param"><b>PPP:</b> ${params.ppp}</div>`;
+  h+=`</div>`;
+
+  // Overall KPIs
+  h+=`<h2>Overall Performance</h2><div class="kr">`;
+  [{l:"WIN RATE",v:owp+"%",c:owp>=50?"#006633":"#cc2244",s:tw+" of "+tn},{l:"AVG ADVANTAGE",v:(oa>=0?"+":"")+oa,c:oa>=0?"#006633":"#cc2244",s:"all competitors"},{l:"WINS",v:tw,c:"#006633",s:"vs "+tl+" losses"},{l:"STRONGEST FICO",v:fr[0].f,c:"#006633",s:"avg +"+fr[0].avg},{l:"WEAKEST FICO",v:fr[fr.length-1].f,c:fr[fr.length-1].avg<0?"#cc2244":"#666",s:"avg "+fr[fr.length-1].avg}].forEach(({l,v,c,s})=>{h+=`<div class="k"><div class="kl">${l}</div><div class="kv" style="color:${c}">${v}</div><div class="ks">${s}</div></div>`;});
+  h+=`</div>`;
+
+  // FICO segments
+  h+=`<h3>Performance by FICO</h3><div class="sg">`;
+  fr.forEach(f=>{const p=f.n?Math.round(f.w/f.n*100):0;const bc=p>=60?"#006633":p>=40?"#cc8800":"#cc2244";h+=`<div class="sb"><div class="sl">FICO ${f.f}</div><div class="sv" style="color:${f.avg>=0?"#006633":"#cc2244"}">${f.avg>=0?"+":""}${f.avg}</div><div style="font-size:8px;color:#999">${p}% (${f.w}W/${f.l}L)</div><div style="height:4px;border-radius:2px;margin-top:4px;background:linear-gradient(90deg,${bc} ${p}%,#eee ${p}%)"></div></div>`;});
+  h+=`</div>`;
+
+  // LTV segments
+  h+=`<h3>Performance by LTV</h3><div class="sg">`;
+  lr.forEach(l=>{const p=l.n?Math.round(l.w/l.n*100):0;const bc=p>=60?"#006633":p>=40?"#cc8800":"#cc2244";h+=`<div class="sb"><div class="sl">${l.l}% LTV</div><div class="sv" style="color:${l.avg>=0?"#006633":"#cc2244"}">${l.avg>=0?"+":""}${l.avg}</div><div style="font-size:8px;color:#999">${p}% (${l.w}W/${l.l}L)</div><div style="height:4px;border-radius:2px;margin-top:4px;background:linear-gradient(90deg,${bc} ${p}%,#eee ${p}%)"></div></div>`;});
+  h+=`</div>`;
+
+  // Scorecard
+  h+=`<h3>Competitor Scorecard</h3><table><thead><tr><th style="text-align:left">Competitor</th><th>Win Rate</th><th>Wins</th><th>Losses</th><th>Avg Diff</th><th>Best</th><th>Worst</th><th>Scenarios</th></tr></thead><tbody>`;
+  Object.entries(overallStats).sort((a,b)=>b[1].avg-a[1].avg).forEach(([n,s])=>{h+=`<tr><td style="text-align:left;font-weight:700">${n}</td><td class="${s.wp>=50?"pos":"neg"}">${s.wp}%</td><td class="pos">${s.w}</td><td class="neg">${s.l}</td><td class="${s.avg>=0?"pos":"neg"}">${s.avg>=0?"+":""}${s.avg}</td><td class="pos">+${s.best.toFixed(3)}</td><td class="neg">${s.worst.toFixed(3)}</td><td>${s.n}</td></tr>`;});
+  h+=`</tbody></table>`;
+
+  // PER-COMPETITOR PAGES
+  for(const cn of competitors){
+    const s=overallStats[cn];
+    h+=`<div class="page-break"></div><h1 style="font-size:18px">HX vs ${cn}</h1><div class="sub">${config.label} · PAR RATE ANALYSIS</div>`;
+    h+=`<div class="kr">`;
+    [{l:"WIN RATE",v:s.wp+"%",c:s.wp>=50?"#006633":"#cc2244"},{l:"WINS",v:s.w,c:"#006633"},{l:"LOSSES",v:s.l,c:"#cc2244"},{l:"TIES",v:s.t,c:"#666"},{l:"AVG DIFF",v:(s.avg>=0?"+":"")+s.avg,c:s.avg>=0?"#006633":"#cc2244"},{l:"BEST",v:"+"+s.best.toFixed(3),c:"#006633"},{l:"WORST",v:s.worst.toFixed(3),c:"#cc2244"}].forEach(({l,v,c})=>{h+=`<div class="k"><div class="kl">${l}</div><div class="kv" style="color:${c}">${v}</div></div>`;});
+    h+=`</div>`;
+
+    // Differential matrix
+    h+=`<h3>Net Price Differential — HX minus ${cn}</h3><table><thead><tr><th style="text-align:left">LTV\FICO</th>`;
+    config.ficos.forEach(f=>{h+=`<th>${f}</th>`;});
+    h+=`</tr></thead><tbody>`;
+    config.ltvs.forEach(ltv=>{h+=`<tr><td style="font-weight:700;text-align:left;background:#f0f0f0">${ltv}%</td>`;config.ficos.forEach(fico=>{const c=parAnalysis.grid[`${ltv}_${fico}`]?.competitors?.[cn];const d=c?.diff;h+=d!=null?`<td class="${d>0?"pos":d<0?"neg":"neutral"}">${(d>0?"+":"")+d.toFixed(3)}</td>`:`<td class="neutral">N/A</td>`;});h+=`</tr>`;});
+    h+=`</tbody></table>`;
+
+    // Side by side
+    h+=`<div class="dual"><div><h3>HX Par Rate</h3><table class="mini"><thead><tr><th style="text-align:left">LTV\FICO</th>`;
+    config.ficos.forEach(f=>{h+=`<th>${f}</th>`;});
+    h+=`</tr></thead><tbody>`;
+    config.ltvs.forEach(ltv=>{h+=`<tr><td style="font-weight:700;text-align:left">${ltv}%</td>`;config.ficos.forEach(fico=>{const d=parAnalysis.grid[`${ltv}_${fico}`];h+=`<td>${d?.parRate?d.parRate.toFixed(3)+"%":"—"}</td>`;});h+=`</tr>`;});
+    h+=`</tbody></table></div>`;
+
+    h+=`<div><h3>Net Price @ HX Par</h3><table class="mini"><thead><tr><th style="text-align:left">LTV\FICO</th>`;
+    config.ficos.forEach(f=>{h+=`<th colspan="2">${f}</th>`;});
+    h+=`</tr><tr><th></th>`;config.ficos.forEach(()=>{h+=`<th style="background:#006633;font-size:6px;padding:2px">HX</th><th style="background:#cc2244;font-size:6px;padding:2px">${cn.slice(0,6)}</th>`;});
+    h+=`</tr></thead><tbody>`;
+    config.ltvs.forEach(ltv=>{h+=`<tr><td style="font-weight:700;text-align:left">${ltv}%</td>`;config.ficos.forEach(fico=>{const d=parAnalysis.grid[`${ltv}_${fico}`];const c=d?.competitors?.[cn];const hB=c?.diff>0,cB=c?.diff<0;h+=`<td style="${hB?"background:#e6fff2;font-weight:700":""}">${d?.hxNet?d.hxNet.toFixed(2):"—"}</td><td style="${cB?"background:#ffe6ea;font-weight:700":""}">${c?.net?c.net.toFixed(2):"—"}</td>`;});h+=`</tr>`;});
+    h+=`</tbody></table></div></div>`;
+  }
+
+  h+=`<div class="footer"><span>HomeXpress Mortgage · Par Rate Comparative Analysis · Confidential</span><span>${ts}</span></div></body></html>`;
+  const w=window.open("","_blank");w.document.write(h);w.document.close();setTimeout(()=>{w.print();},500);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -622,7 +635,8 @@ export default function App(){
               <button onClick={()=>{setShowBuydown(!showBuydown);setShowPar(false);}} style={{padding:"8px 20px",background:showBuydown?T.blue:T.bg,color:showBuydown?T.bg:T.muted,border:`1px solid ${showBuydown?T.blue:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>BUYDOWN</button>
               <button onClick={()=>{setShowPar(!showPar);setShowBuydown(false);}} style={{padding:"8px 20px",background:showPar?"#a78bfa":T.bg,color:showPar?T.bg:T.muted,border:`1px solid ${showPar?"#a78bfa":T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>PAR ANALYSIS</button>
               <div style={{flex:1}}/>
-              <button onClick={()=>exportPDF(results,matrix,buydown,parAnalysis,config,params,lenders,view,hxN)} style={{padding:"8px 16px",background:"transparent",color:T.accent,border:`1px solid ${T.accent}44`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ PDF REPORT</button>
+              {showPar&&parAnalysis&&<button onClick={()=>exportParPDF(parAnalysis,config,params,lenders,hxN)} style={{padding:"8px 16px",background:"#a78bfa22",color:"#a78bfa",border:"1px solid #a78bfa44",borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ PAR REPORT PDF</button>}
+              <button onClick={()=>exportPDF(results,matrix,buydown,config,params,lenders,view,hxN)} style={{padding:"8px 16px",background:"transparent",color:T.accent,border:`1px solid ${T.accent}44`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ PDF REPORT</button>
               <button onClick={()=>exportXLSX(results,params,best)} style={{padding:"8px 16px",background:"transparent",color:T.muted,border:`1px solid ${T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ XLSX</button>
             </div>
 
@@ -843,4 +857,3 @@ export default function App(){
     </div>
   );
 }
-           
