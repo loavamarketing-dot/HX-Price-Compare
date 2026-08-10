@@ -529,14 +529,7 @@ export default function App(){
 
             <div style={{marginTop:16,fontSize:9,color:T.dark,textAlign:"center",letterSpacing:2,textTransform:"uppercase"}}>{names.join(" · ")}</div>
 
-            {/* TradingView Economic Calendar */}
-            <div style={{marginTop:20,border:`1px solid ${T.border}`,borderRadius:2,overflow:"hidden"}}>
-              <div style={{padding:"10px 14px",background:T.card,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:T.muted}}>ECONOMIC CALENDAR</span>
-                <span style={{fontSize:9,color:T.dark,letterSpacing:1}}>— U.S. HIGH IMPACT EVENTS</span>
-              </div>
-              <TradingViewCalendar />
-            </div>
+            <MarketWidgets />
           </>
         )}
       </div>
