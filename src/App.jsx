@@ -213,6 +213,62 @@ function calcBuydownAnalysis(lenders, params) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   PAR RATE ANALYSIS
+   For each FICO/LTV, find HX par rate (net ≈ 100), then compare
+   HX net price at par vs every competitor at the same rate.
+   ═══════════════════════════════════════════════════════════════ */
+function calcParAnalysis(lenders, params, config, hxName) {
+  const allRates = [...new Set(Object.values(lenders).flatMap(l=>Object.keys(l.rates).map(Number)))].sort((a,b)=>a-b);
+  const hxLender = lenders[hxName];
+  if (!hxLender) return null;
+
+  const competitors = Object.entries(lenders).filter(([n])=>n!==hxName);
+  const grid = {};
+
+  for (const fico of config.ficos) {
+    for (const ltv of config.ltvs) {
+      const key = `${ltv}_${fico}`;
+
+      // Find HX par rate: rate where net price is closest to 100.000
+      let bestParRate = null, bestParNet = null, bestParDiff = Infinity;
+      for (const rate of allRates) {
+        const r = calcNet(hxLender, { ...params, rate, fico, ltv });
+        if (r.ok && r.net !== null) {
+          const diff = Math.abs(r.net - 100);
+          if (diff < bestParDiff) {
+            bestParDiff = diff;
+            bestParRate = rate;
+            bestParNet = r.net;
+          }
+        }
+      }
+
+      if (!bestParRate) {
+        grid[key] = { fico, ltv, parRate: null, hxNet: null, competitors: {} };
+        continue;
+      }
+
+      // At HX par rate, calculate every competitor's net price
+      const compResults = {};
+      for (const [compName, compLender] of competitors) {
+        const cr = calcNet(compLender, { ...params, rate: bestParRate, fico, ltv });
+        const diff = cr.ok && cr.net ? +(bestParNet - cr.net).toFixed(3) : null;
+        compResults[compName] = {
+          net: cr.ok ? cr.net : null,
+          diff,  // positive = HX better, negative = competitor better
+          eligible: cr.ok,
+          reason: cr.reason,
+        };
+      }
+
+      grid[key] = { fico, ltv, parRate: bestParRate, hxNet: bestParNet, competitors: compResults };
+    }
+  }
+
+  return { grid, competitors: competitors.map(([n])=>n) };
+}
+
+/* ═══════════════════════════════════════════════════════════════
    PARSER
    ═══════════════════════════════════════════════════════════════ */
 function parseFile(data){
@@ -345,6 +401,7 @@ export default function App(){
   const[view,setView]=useState(urlP._view||"ranking");
   const[file,setFile]=useState("");
   const[showBuydown,setShowBuydown]=useState(false);
+  const[showPar,setShowPar]=useState(false);
   const[params,setParams]=useState({
     rate:urlP.rate||7.25,fico:urlP.fico||720,ltv:urlP.ltv||75,lock:urlP.lock||"30",
     purpose:urlP.purpose||"Purchase",loanAmount:urlP.loanAmount||"750000",
@@ -375,6 +432,8 @@ export default function App(){
   const names=lenders?Object.keys(lenders):[];
   const hxN=names.find(n=>/hx|homex/i.test(n))||names[0];
   const hx=results.find(r=>r.lender===hxN);const best=results[0];
+
+  const parAnalysis=useMemo(()=>(lenders&&showPar)?calcParAnalysis(lenders,params,config,hxN):null,[lenders,params,config,hxN,showPar]);
 
   const Sel=({l,v,fn,opts,w})=>(<div style={{minWidth:w||100}}><div style={{fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:1.5,marginBottom:3,fontWeight:600}}>{l}</div><select value={v} onChange={e=>fn(e.target.value)} style={{width:"100%",padding:"6px 8px",background:T.sf,color:T.text,border:`1px solid ${T.border}`,borderRadius:2,fontSize:12,fontFamily:T.sans,outline:"none"}}>{opts.map(o=><option key={o.v??o} value={o.v??o}>{o.l??o}</option>)}</select></div>);
   const Tog=({l,v,fn})=>(<div style={{minWidth:75}}><div style={{fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:1.5,marginBottom:3,fontWeight:600}}>{l}</div><button onClick={()=>fn(v==="Yes"?"No":"Yes")} style={{width:"100%",padding:"6px 8px",background:v==="Yes"?T.accentDim:T.sf,color:v==="Yes"?T.accent:T.muted,border:`1px solid ${v==="Yes"?T.accent+"44":T.border}`,borderRadius:2,fontSize:11,cursor:"pointer",fontWeight:600,fontFamily:T.sans}}>{v==="Yes"?"● YES":"○ NO"}</button></div>);
@@ -429,14 +488,15 @@ export default function App(){
               {[["ranking","RANKING"],["decomp","WATERFALL"],["matrix","MATRIX"]].map(([k,l])=>(
                 <button key={k} onClick={()=>setView(k)} style={{padding:"8px 20px",background:view===k?T.accent:T.bg,color:view===k?T.bg:T.muted,border:`1px solid ${view===k?T.accent:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>{l}</button>
               ))}
-              <button onClick={()=>setShowBuydown(!showBuydown)} style={{padding:"8px 20px",background:showBuydown?T.blue:T.bg,color:showBuydown?T.bg:T.muted,border:`1px solid ${showBuydown?T.blue:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>BUYDOWN</button>
+              <button onClick={()=>{setShowBuydown(!showBuydown);setShowPar(false);}} style={{padding:"8px 20px",background:showBuydown?T.blue:T.bg,color:showBuydown?T.bg:T.muted,border:`1px solid ${showBuydown?T.blue:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>BUYDOWN</button>
+              <button onClick={()=>{setShowPar(!showPar);setShowBuydown(false);}} style={{padding:"8px 20px",background:showPar?"#a78bfa":T.bg,color:showPar?T.bg:T.muted,border:`1px solid ${showPar?"#a78bfa":T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>PAR ANALYSIS</button>
               <div style={{flex:1}}/>
               <button onClick={()=>exportPDF(results,matrix,buydown,config,params,lenders,view,hxN)} style={{padding:"8px 16px",background:"transparent",color:T.accent,border:`1px solid ${T.accent}44`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ PDF REPORT</button>
               <button onClick={()=>exportXLSX(results,params,best)} style={{padding:"8px 16px",background:"transparent",color:T.muted,border:`1px solid ${T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ XLSX</button>
             </div>
 
             {/* KPIs */}
-            {view!=="matrix"&&!showBuydown&&(
+            {view!=="matrix"&&!showBuydown&&!showPar&&!showPar&&(
               <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:8,marginBottom:14}}>
                 {[{l:"HX NET PRICE",v:hx?.ok?hx.net.toFixed(3):"N/A",c:T.accent},{l:"RANK",v:hx?.rank?`#${hx.rank}`:"N/A",c:hx?.rank<=3?T.green:hx?.rank<=5?T.amber:T.red},{l:"ADJUSTMENTS",v:hx?.ok?hx.adjustments.length:"—",c:T.muted},{l:"TOTAL LLPA",v:hx?.ok?(hx.totalAdj>=0?"+":"")+hx.totalAdj.toFixed(3):"—",c:clr(hx?.totalAdj)},{l:"BEST PRICE",v:best?.net?.toFixed(3)||"—",c:T.green},{l:"GAP TO #1",v:hx?.ok&&best?.ok?(hx.net>=best.net?"—":(hx.net-best.net).toFixed(3)):"N/A",c:hx?.net>=best?.net?T.green:T.red}].map((k,i)=>(
                   <div key={i} style={{background:T.card,borderRadius:2,padding:"12px 14px",border:`1px solid ${T.border}`,borderTop:`2px solid ${k.c}22`}}>
@@ -448,7 +508,7 @@ export default function App(){
             )}
 
             {/* BUYDOWN ANALYSIS */}
-            {showBuydown&&buydown&&(
+            {showBuydown&&!showPar&&buydown&&(
               <div style={{border:`1px solid ${T.border}`,borderRadius:2,overflow:"auto",marginBottom:14}}>
                 <div style={{padding:"12px 16px",background:T.card,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div><span style={{fontSize:12,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase"}}>Rate Stack / Buydown Analysis</span><span style={{fontSize:10,color:T.muted,marginLeft:12}}>Net price at each rate with all scenario LLPAs applied</span></div>
@@ -483,7 +543,7 @@ export default function App(){
             )}
 
             {/* RANKING */}
-            {view==="ranking"&&!showBuydown&&(
+            {view==="ranking"&&!showBuydown&&!showPar&&(
               <div style={{border:`1px solid ${T.border}`,borderRadius:2,overflow:"hidden"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                   <thead><tr style={{background:T.card}}>
@@ -506,7 +566,7 @@ export default function App(){
             )}
 
             {/* WATERFALL */}
-            {view==="decomp"&&!showBuydown&&(
+            {view==="decomp"&&!showBuydown&&!showPar&&(
               <div style={{display:"grid",gridTemplateColumns:`repeat(${Math.min(names.length,4)},1fr)`,gap:10}}>
                 {names.map(name=>{const r=results.find(x=>x.lender===name);const isHx=name===hxN;return(
                   <div key={name} style={{background:T.card,borderRadius:2,border:`1px solid ${isHx?T.accent+"44":T.border}`,padding:16,borderTop:isHx?`2px solid ${T.accent}`:`2px solid ${T.border}`}}>
@@ -525,7 +585,7 @@ export default function App(){
             )}
 
             {/* MATRIX */}
-            {view==="matrix"&&!showBuydown&&(
+            {view==="matrix"&&!showBuydown&&!showPar&&(
               <div style={{border:`1px solid ${T.border}`,borderRadius:2,overflow:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                   <thead><tr style={{background:T.card}}><th style={{padding:"10px 12px",color:T.muted,fontSize:9,letterSpacing:1.5,borderBottom:`1px solid ${T.border}`,fontWeight:600,textAlign:"left"}}>LTV \ FICO</th>{config.ficos.map(f=><th key={f} style={{padding:"10px 12px",textAlign:"center",color:T.muted,fontSize:9,borderBottom:`1px solid ${T.border}`,fontWeight:600,letterSpacing:1}}>{f}</th>)}</tr></thead>
@@ -536,6 +596,114 @@ export default function App(){
             )}
 
             <div style={{marginTop:16,fontSize:9,color:T.dark,textAlign:"center",letterSpacing:2,textTransform:"uppercase"}}>{names.join(" · ")}</div>
+
+            {/* PAR RATE ANALYSIS */}
+            {showPar&&parAnalysis&&(
+              <div style={{marginBottom:14}}>
+                <div style={{padding:"12px 16px",background:T.card,border:`1px solid ${T.border}`,borderRadius:2,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <span style={{fontSize:12,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase"}}>Par Rate Comparative Analysis</span>
+                    <div style={{fontSize:10,color:T.muted,marginTop:2}}>At each FICO/LTV, finds HX par rate (net ≈ 100), then compares HX net price vs competitors at that same rate. Green = HX better priced. Red = competitor better priced.</div>
+                  </div>
+                </div>
+
+                {parAnalysis.competitors.map(compName=>(
+                  <div key={compName} style={{marginBottom:16}}>
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing:1.5,color:T.accent,marginBottom:6,textTransform:"uppercase",borderLeft:`2px solid ${T.accent}`,paddingLeft:8}}>HX vs {compName}</div>
+
+                    {/* Par Rate Matrix */}
+                    <div style={{marginBottom:8,fontSize:10,color:T.muted,letterSpacing:1}}>HX PAR RATE</div>
+                    <div style={{border:`1px solid ${T.border}`,borderRadius:2,overflow:"auto",marginBottom:10}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                        <thead><tr style={{background:T.card}}>
+                          <th style={{padding:"8px 10px",color:T.muted,fontSize:9,letterSpacing:1.5,borderBottom:`1px solid ${T.border}`,textAlign:"left"}}>LTV \ FICO</th>
+                          {config.ficos.map(f=><th key={f} style={{padding:"8px 10px",textAlign:"center",color:T.muted,fontSize:9,borderBottom:`1px solid ${T.border}`,letterSpacing:1}}>{f}</th>)}
+                        </tr></thead>
+                        <tbody>{config.ltvs.map(ltv=>(
+                          <tr key={ltv} style={{borderBottom:`1px solid ${T.border}`}}>
+                            <td style={{padding:"6px 10px",fontWeight:700,color:T.muted,fontFamily:T.mono}}>{ltv}%</td>
+                            {config.ficos.map(fico=>{
+                              const d=parAnalysis.grid[`${ltv}_${fico}`];
+                              return <td key={fico} style={{padding:"6px 10px",textAlign:"center",fontFamily:T.mono,fontSize:11,color:d?.parRate?T.sub:T.dark}}>{d?.parRate?d.parRate.toFixed(3)+"%":"N/A"}</td>;
+                            })}
+                          </tr>
+                        ))}</tbody>
+                      </table>
+                    </div>
+
+                    {/* Price Differential Matrix */}
+                    <div style={{marginBottom:8,fontSize:10,color:T.muted,letterSpacing:1}}>NET PRICE DIFFERENTIAL (HX − {compName.toUpperCase()})</div>
+                    <div style={{border:`1px solid ${T.border}`,borderRadius:2,overflow:"auto",marginBottom:10}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                        <thead><tr style={{background:T.card}}>
+                          <th style={{padding:"8px 10px",color:T.muted,fontSize:9,letterSpacing:1.5,borderBottom:`1px solid ${T.border}`,textAlign:"left"}}>LTV \ FICO</th>
+                          {config.ficos.map(f=><th key={f} style={{padding:"8px 10px",textAlign:"center",color:T.muted,fontSize:9,borderBottom:`1px solid ${T.border}`,letterSpacing:1}}>{f}</th>)}
+                        </tr></thead>
+                        <tbody>{config.ltvs.map(ltv=>(
+                          <tr key={ltv} style={{borderBottom:`1px solid ${T.border}`}}>
+                            <td style={{padding:"6px 10px",fontWeight:700,color:T.muted,fontFamily:T.mono}}>{ltv}%</td>
+                            {config.ficos.map(fico=>{
+                              const d=parAnalysis.grid[`${ltv}_${fico}`];
+                              const comp=d?.competitors?.[compName];
+                              const diff=comp?.diff;
+                              const bg=diff!=null?(diff>0?`${T.green}15`:diff<0?`${T.red}12`:"transparent"):"transparent";
+                              const tc=diff!=null?(diff>0?T.green:diff<0?T.red:T.muted):T.dark;
+                              return <td key={fico} style={{padding:"6px 10px",textAlign:"center",fontFamily:T.mono,fontSize:12,fontWeight:diff?700:400,color:tc,background:bg}}>
+                                {diff!=null?(diff>0?"+":"")+diff.toFixed(3):"N/A"}
+                              </td>;
+                            })}
+                          </tr>
+                        ))}</tbody>
+                      </table>
+                    </div>
+
+                    {/* Side-by-side: HX Net vs Competitor Net */}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                      {[{label:`HX NET PRICE @ PAR`,fn:(d)=>d?.hxNet},{label:`${compName.toUpperCase()} NET PRICE @ HX PAR`,fn:(d)=>d?.competitors?.[compName]?.net}].map(({label,fn},mi)=>(
+                        <div key={mi}>
+                          <div style={{marginBottom:6,fontSize:10,color:T.muted,letterSpacing:1}}>{label}</div>
+                          <div style={{border:`1px solid ${T.border}`,borderRadius:2,overflow:"auto"}}>
+                            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                              <thead><tr style={{background:T.card}}>
+                                <th style={{padding:"6px 8px",color:T.muted,fontSize:9,letterSpacing:1,borderBottom:`1px solid ${T.border}`,textAlign:"left"}}>LTV\FICO</th>
+                                {config.ficos.map(f=><th key={f} style={{padding:"6px 8px",textAlign:"center",color:T.muted,fontSize:9,borderBottom:`1px solid ${T.border}`}}>{f}</th>)}
+                              </tr></thead>
+                              <tbody>{config.ltvs.map(ltv=>(
+                                <tr key={ltv} style={{borderBottom:`1px solid ${T.border}`}}>
+                                  <td style={{padding:"5px 8px",fontWeight:700,color:T.muted,fontFamily:T.mono,fontSize:10}}>{ltv}%</td>
+                                  {config.ficos.map(fico=>{
+                                    const d=parAnalysis.grid[`${ltv}_${fico}`];
+                                    const val=fn(d);
+                                    return <td key={fico} style={{padding:"5px 8px",textAlign:"center",fontFamily:T.mono,fontSize:11,color:val?T.sub:T.dark}}>{val?val.toFixed(3):"N/A"}</td>;
+                                  })}
+                                </tr>
+                              ))}</tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Summary stats */}
+                    {(()=>{
+                      const diffs=config.ltvs.flatMap(ltv=>config.ficos.map(fico=>parAnalysis.grid[`${ltv}_${fico}`]?.competitors?.[compName]?.diff)).filter(d=>d!=null);
+                      const wins=diffs.filter(d=>d>0).length;const losses=diffs.filter(d=>d<0).length;const ties=diffs.filter(d=>d===0).length;
+                      const avgDiff=diffs.length?+(diffs.reduce((s,d)=>s+d,0)/diffs.length).toFixed(3):0;
+                      return(
+                        <div style={{display:"flex",gap:8,marginTop:10,marginBottom:20}}>
+                          {[{l:"HX WINS",v:wins,c:T.green},{l:"HX LOSSES",v:losses,c:T.red},{l:"TIES",v:ties,c:T.muted},{l:"AVG DIFFERENTIAL",v:(avgDiff>0?"+":"")+avgDiff.toFixed(3),c:clr(avgDiff)},{l:"SCENARIOS",v:diffs.length,c:T.sub}].map((k,i)=>(
+                            <div key={i} style={{flex:1,background:T.card,borderRadius:2,padding:"8px 12px",border:`1px solid ${T.border}`,borderTop:`2px solid ${k.c}22`}}>
+                              <div style={{fontSize:9,color:T.muted,letterSpacing:1.5,fontWeight:600}}>{k.l}</div>
+                              <div style={{fontSize:18,fontWeight:700,color:k.c,fontFamily:T.mono,marginTop:2}}>{k.v}</div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ))}
+              </div>
+            )}
 
             <MarketWidgets />
           </>
