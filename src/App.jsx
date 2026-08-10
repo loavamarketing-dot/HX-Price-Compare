@@ -357,11 +357,16 @@ export default function App(){
 
   const config=CONFIGS[product];
   const set=(k,v)=>{setParams(p=>{const next={...p,[k]:v};return next;});};
+  const[dragging,setDragging]=useState(false);
 
   // Sync URL
   useEffect(()=>{if(lenders)writeParams(params,view);},[params,view,lenders]);
 
-  const onUpload=useCallback(e=>{const f=e.target.files[0];if(!f)return;setFile(f.name);const rd=new FileReader();rd.onload=ev=>{const{lenders:l,product:p}=parseFile(new Uint8Array(ev.target.result));setLenders(l);setProduct(p);};rd.readAsArrayBuffer(f);},[]);
+  const processFile=useCallback(f=>{if(!f)return;setFile(f.name);const rd=new FileReader();rd.onload=ev=>{const{lenders:l,product:p}=parseFile(new Uint8Array(ev.target.result));setLenders(l);setProduct(p);};rd.readAsArrayBuffer(f);},[]);
+  const onUpload=useCallback(e=>{processFile(e.target.files[0]);},[processFile]);
+  const onDrop=useCallback(e=>{e.preventDefault();e.stopPropagation();setDragging(false);const f=e.dataTransfer?.files?.[0];if(f&&/\.xlsx?$/i.test(f.name))processFile(f);},[processFile]);
+  const onDragOver=useCallback(e=>{e.preventDefault();e.stopPropagation();setDragging(true);},[]);
+  const onDragLeave=useCallback(e=>{e.preventDefault();e.stopPropagation();setDragging(false);},[]);
   const rates=useMemo(()=>lenders?[...new Set(Object.values(lenders).flatMap(l=>Object.keys(l.rates).map(Number)))].sort((a,b)=>a-b):[],[lenders]);
   const results=useMemo(()=>{if(!lenders)return[];const a=Object.values(lenders).map(l=>calcNet(l,params));const o=a.filter(r=>r.ok).sort((a,b)=>b.net-a.net);o.forEach((r,i)=>r.rank=i+1);return[...o,...a.filter(r=>!r.ok)];},[lenders,params]);
   const matrix=useMemo(()=>{if(!lenders||view!=="matrix")return{};const m={};for(const ltv of config.ltvs)for(const fico of config.ficos){const p={...params,fico,ltv};const a=Object.values(lenders).map(l=>calcNet(l,p));const o=a.filter(r=>r.ok).sort((a,b)=>b.net-a.net);o.forEach((r,i)=>r.rank=i+1);m[`${ltv}_${fico}`]=[...o,...a.filter(r=>!r.ok)];}return m;},[lenders,params,view,config]);
@@ -394,10 +399,11 @@ export default function App(){
       <div style={{maxWidth:1500,margin:"0 auto",padding:"20px 28px"}}>
         {!lenders?(
           <>
-          <div style={{textAlign:"center",padding:"120px 20px",border:`1px solid ${T.border}`,borderRadius:2,marginTop:40}}>
-            <div style={{width:60,height:60,border:`2px solid ${T.accent}`,borderRadius:2,margin:"0 auto 20px",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:24,color:T.accent}}>↑</span></div>
-            <div style={{fontSize:14,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>INITIALIZE SYSTEM</div>
-            <div style={{fontSize:12,color:T.muted,maxWidth:400,margin:"0 auto",lineHeight:1.8}}>Upload a competitor template (.xlsx) to begin analysis.</div>
+          <div onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave} style={{textAlign:"center",padding:"80px 20px",border:`2px dashed ${dragging?T.accent:T.border}`,borderRadius:2,marginTop:40,background:dragging?T.accentDim:"transparent",transition:"all .2s",cursor:"pointer"}} onClick={()=>document.getElementById("file-input").click()}>
+            <input id="file-input" type="file" accept=".xlsx,.xls" onChange={onUpload} style={{display:"none"}}/>
+            <div style={{width:60,height:60,border:`2px solid ${dragging?T.accent:T.border}`,borderRadius:2,margin:"0 auto 20px",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}><span style={{fontSize:24,color:T.accent}}>{dragging?"↓":"↑"}</span></div>
+            <div style={{fontSize:14,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>{dragging?"DROP FILE HERE":"INITIALIZE SYSTEM"}</div>
+            <div style={{fontSize:12,color:T.muted,maxWidth:400,margin:"0 auto",lineHeight:1.8}}>{dragging?"Release to upload template":"Drag & drop a competitor template (.xlsx) here, or click to browse"}</div>
           </div>
           <MarketWidgets />
           </>
