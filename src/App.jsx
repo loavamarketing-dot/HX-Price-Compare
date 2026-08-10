@@ -393,12 +393,14 @@ export default function App(){
 
       <div style={{maxWidth:1500,margin:"0 auto",padding:"20px 28px"}}>
         {!lenders?(
+          <>
           <div style={{textAlign:"center",padding:"120px 20px",border:`1px solid ${T.border}`,borderRadius:2,marginTop:40}}>
             <div style={{width:60,height:60,border:`2px solid ${T.accent}`,borderRadius:2,margin:"0 auto 20px",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:24,color:T.accent}}>↑</span></div>
             <div style={{fontSize:14,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>INITIALIZE SYSTEM</div>
             <div style={{fontSize:12,color:T.muted,maxWidth:400,margin:"0 auto",lineHeight:1.8}}>Upload a competitor template (.xlsx) to begin analysis.</div>
           </div>
           <MarketWidgets />
+          </>
         ):(
           <>
             {/* PARAMETERS */}
