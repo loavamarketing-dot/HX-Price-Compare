@@ -279,7 +279,7 @@ function parseFile(data){
 /* ═══════════════════════════════════════════════════════════════
    EXPORTS
    ═══════════════════════════════════════════════════════════════ */
-function exportPDF(results,matrix,buydown,config,params,lenders,view,hxN){
+function exportPDF(results,matrix,buydown,parAnalysis,config,params,lenders,view,hxN){
   const hx=results.find(r=>r.lender===hxN);const best=results[0];
   const gap=hx?.ok&&best?.ok?(hx.net-best.net).toFixed(3):"N/A";
   const ts=new Date().toLocaleString();
@@ -300,16 +300,39 @@ function exportPDF(results,matrix,buydown,config,params,lenders,view,hxN){
   }
 
   let html = `<html><head><style>
-    @page{margin:30px 40px;size:landscape;}body{font-family:Arial,sans-serif;color:#222;margin:0;padding:40px;}
-    h1{font-size:20px;color:#000;margin:0;letter-spacing:1px;}h2{font-size:14px;color:#333;margin:24px 0 6px;border-bottom:2px solid #000;padding-bottom:3px;letter-spacing:0.5px;}
-    .sub{font-size:10px;color:#888;margin:2px 0 16px;letter-spacing:1px;text-transform:uppercase;}
-    .narrative{background:#f8f8f8;border-left:3px solid #00b894;padding:10px 14px;margin:12px 0;font-size:11px;line-height:1.6;}
-    .kpi-grid{display:flex;gap:10px;margin:12px 0;}.kpi{border:1px solid #ddd;padding:8px 12px;min-width:100px;}.kpi-label{font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#888;}.kpi-value{font-size:18px;font-weight:700;margin-top:2px;}
-    table{width:100%;border-collapse:collapse;font-size:10px;margin:6px 0;}th{background:#111;color:#fff;padding:5px 6px;text-align:center;font-size:8px;text-transform:uppercase;letter-spacing:0.5px;}td{padding:4px 6px;border-bottom:1px solid #eee;text-align:center;}
-    tr:nth-child(even){background:#f9f9f9;}.hx{background:#e6fff7!important;font-weight:700;}.pos{color:#008855;font-weight:600;}.neg{color:#cc2244;font-weight:600;}
-    .params{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin:8px 0;font-size:9px;}.param b{color:#000;}
-    .footer{margin-top:20px;padding-top:8px;border-top:1px solid #ccc;font-size:8px;color:#aaa;display:flex;justify-content:space-between;}
+    @page{margin:25px 30px;size:landscape;}
+    body{font-family:'Inter',Arial,sans-serif;color:#1a1a1a;margin:0;padding:30px 40px;background:#fff;}
+    h1{font-size:22px;color:#000;margin:0;letter-spacing:2px;text-transform:uppercase;font-weight:800;}
+    h2{font-size:13px;color:#000;margin:28px 0 8px;letter-spacing:2px;text-transform:uppercase;border-bottom:2px solid #000;padding-bottom:4px;font-weight:700;}
+    h3{font-size:11px;color:#444;margin:18px 0 6px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;}
+    .sub{font-size:9px;color:#999;margin:3px 0 16px;letter-spacing:2px;text-transform:uppercase;}
+    .narrative{background:#f0faf7;border-left:3px solid #00b894;padding:10px 14px;margin:14px 0;font-size:10px;line-height:1.7;color:#333;}
+    .kpi-grid{display:flex;gap:10px;margin:14px 0;}
+    .kpi{border:1px solid #e0e0e0;padding:10px 14px;min-width:110px;border-radius:2px;}
+    .kpi-label{font-size:8px;text-transform:uppercase;letter-spacing:1.5px;color:#999;font-weight:600;}
+    .kpi-value{font-size:20px;font-weight:800;margin-top:3px;font-family:'Consolas','SF Mono',monospace;}
+    table{width:100%;border-collapse:collapse;font-size:9px;margin:6px 0;font-family:'Consolas','SF Mono',monospace;}
+    th{background:#111;color:#fff;padding:6px 7px;text-align:center;font-size:8px;text-transform:uppercase;letter-spacing:1px;font-weight:600;}
+    td{padding:5px 7px;border-bottom:1px solid #eee;text-align:center;}
+    tr:nth-child(even){background:#f8f9fa;}
+    .hx{background:#e6fff7!important;font-weight:700;}
+    .pos{color:#008855;font-weight:700;}.neg{color:#cc2244;font-weight:700;}
+    .params{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin:8px 0;font-size:9px;}
+    .param b{color:#000;font-weight:700;}
+    .footer{margin-top:24px;padding-top:8px;border-top:1px solid #ccc;font-size:8px;color:#bbb;display:flex;justify-content:space-between;letter-spacing:1px;}
     .page-break{page-break-before:always;}
+    .par-cell-pos{background:#e6fff2;color:#006633;font-weight:700;}
+    .par-cell-neg{background:#ffe6ea;color:#cc2244;font-weight:700;}
+    .par-cell-neutral{color:#999;}
+    .section-label{font-size:9px;color:#666;letter-spacing:1.5px;text-transform:uppercase;margin:10px 0 4px;font-weight:600;}
+    .summary-grid{display:flex;gap:8px;margin:12px 0 20px;}
+    .summary-box{flex:1;border:1px solid #e0e0e0;padding:8px 12px;border-radius:2px;text-align:center;}
+    .summary-label{font-size:7px;text-transform:uppercase;letter-spacing:1.5px;color:#999;font-weight:600;}
+    .summary-value{font-size:18px;font-weight:800;margin-top:2px;font-family:'Consolas',monospace;}
+    .dual-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0;}
+    .mini-table{font-size:8px;}
+    .mini-table th{padding:4px 5px;font-size:7px;}
+    .mini-table td{padding:3px 5px;}
   </style></head><body>`;
 
   html+=`<h1>PRICING COMPARISON REPORT</h1><div class="sub">${config.label} · ${ts}</div>`;
@@ -379,6 +402,114 @@ function exportPDF(results,matrix,buydown,config,params,lenders,view,hxN){
     html+=`</tbody></table>`;
   }
 
+  // Par Rate Analysis
+  if (parAnalysis && parAnalysis.competitors.length) {
+    html+=`<div class="page-break"></div>`;
+    html+=`<h1>PAR RATE COMPARATIVE ANALYSIS</h1>`;
+    html+=`<div class="sub">${config.label} · ${ts}</div>`;
+    html+=`<div class="narrative"><strong>Methodology:</strong> For each FICO/LTV intersection, the engine identifies the HX par rate (the coupon where HX net price is closest to 100.000). It then calculates every competitor's net price at that same rate with all scenario LLPAs applied. The differential shows where HX is better priced (green/positive) vs where the competitor has an advantage (red/negative).</div>`;
+
+    // Scenario params for context
+    html+=`<div class="params">`;
+    [["Purpose",params.purpose],["Lock",params.lock+" Day"],["Income",params.incomeDoc],["Occupancy",params.occupancy],["Property",params.propertyType]].forEach(([k,v])=>{html+=`<div class="param"><b>${k}:</b> ${v}</div>`;});
+    if(params.dscr) html+=`<div class="param"><b>DSCR:</b> ${params.dscr}</div><div class="param"><b>PPP:</b> ${params.ppp}</div>`;
+    html+=`</div>`;
+
+    for (const compName of parAnalysis.competitors) {
+      // Compute summary stats
+      const diffs = config.ltvs.flatMap(ltv=>config.ficos.map(fico=>parAnalysis.grid[`${ltv}_${fico}`]?.competitors?.[compName]?.diff)).filter(d=>d!=null);
+      const wins=diffs.filter(d=>d>0).length;
+      const losses=diffs.filter(d=>d<0).length;
+      const ties=diffs.filter(d=>d===0).length;
+      const avgDiff=diffs.length?+(diffs.reduce((s,d)=>s+d,0)/diffs.length).toFixed(3):0;
+      const worstDiff=diffs.length?Math.min(...diffs):0;
+      const bestDiff=diffs.length?Math.max(...diffs):0;
+      const winPct=diffs.length?Math.round(wins/diffs.length*100):0;
+
+      html+=`<h2>HX vs ${compName}</h2>`;
+
+      // Summary KPIs
+      html+=`<div class="summary-grid">`;
+      [
+        {l:"WIN RATE",v:winPct+"%",c:winPct>=50?"#006633":"#cc2244"},
+        {l:"HX WINS",v:wins,c:"#006633"},
+        {l:"HX LOSSES",v:losses,c:"#cc2244"},
+        {l:"TIES",v:ties,c:"#666"},
+        {l:"AVG DIFFERENTIAL",v:(avgDiff>0?"+":"")+avgDiff.toFixed(3),c:avgDiff>=0?"#006633":"#cc2244"},
+        {l:"BEST ADVANTAGE",v:"+"+bestDiff.toFixed(3),c:"#006633"},
+        {l:"WORST GAP",v:worstDiff.toFixed(3),c:"#cc2244"},
+        {l:"SCENARIOS",v:diffs.length,c:"#333"},
+      ].forEach(({l,v,c})=>{
+        html+=`<div class="summary-box"><div class="summary-label">${l}</div><div class="summary-value" style="color:${c}">${v}</div></div>`;
+      });
+      html+=`</div>`;
+
+      // Price Differential Matrix (the main visual)
+      html+=`<h3>Net Price Differential — HX minus ${compName}</h3>`;
+      html+=`<table><thead><tr><th style="text-align:left">LTV \\ FICO</th>`;
+      config.ficos.forEach(f=>{html+=`<th>${f}</th>`;});
+      html+=`</tr></thead><tbody>`;
+      config.ltvs.forEach(ltv=>{
+        html+=`<tr><td style="font-weight:700;text-align:left;background:#f0f0f0">${ltv}%</td>`;
+        config.ficos.forEach(fico=>{
+          const d=parAnalysis.grid[`${ltv}_${fico}`];
+          const comp=d?.competitors?.[compName];
+          const diff=comp?.diff;
+          if(diff!=null){
+            const cls=diff>0?"par-cell-pos":diff<0?"par-cell-neg":"par-cell-neutral";
+            html+=`<td class="${cls}">${(diff>0?"+":"")+diff.toFixed(3)}</td>`;
+          } else {
+            html+=`<td class="par-cell-neutral">N/A</td>`;
+          }
+        });
+        html+=`</tr>`;
+      });
+      html+=`</tbody></table>`;
+
+      // Side-by-side: HX Par Rate + HX Net + Competitor Net
+      html+=`<div class="dual-grid">`;
+
+      // Left: HX Par Rate
+      html+=`<div><h3>HX Par Rate</h3><table class="mini-table"><thead><tr><th style="text-align:left">LTV\\FICO</th>`;
+      config.ficos.forEach(f=>{html+=`<th>${f}</th>`;});
+      html+=`</tr></thead><tbody>`;
+      config.ltvs.forEach(ltv=>{
+        html+=`<tr><td style="font-weight:700;text-align:left">${ltv}%</td>`;
+        config.ficos.forEach(fico=>{
+          const d=parAnalysis.grid[`${ltv}_${fico}`];
+          html+=`<td>${d?.parRate?d.parRate.toFixed(3)+"%":"—"}</td>`;
+        });
+        html+=`</tr>`;
+      });
+      html+=`</tbody></table></div>`;
+
+      // Right: HX Net vs Competitor Net
+      html+=`<div><h3>Net Price Comparison @ HX Par</h3><table class="mini-table"><thead><tr><th style="text-align:left">LTV\\FICO</th>`;
+      config.ficos.forEach(f=>{html+=`<th colspan="2">${f}</th>`;});
+      html+=`</tr><tr><th></th>`;
+      config.ficos.forEach(()=>{html+=`<th style="background:#006633;font-size:6px">HX</th><th style="background:#cc2244;font-size:6px">${compName.slice(0,8)}</th>`;});
+      html+=`</tr></thead><tbody>`;
+      config.ltvs.forEach(ltv=>{
+        html+=`<tr><td style="font-weight:700;text-align:left">${ltv}%</td>`;
+        config.ficos.forEach(fico=>{
+          const d=parAnalysis.grid[`${ltv}_${fico}`];
+          const comp=d?.competitors?.[compName];
+          const hxBetter=comp?.diff!=null&&comp.diff>0;
+          const compBetter=comp?.diff!=null&&comp.diff<0;
+          html+=`<td style="font-weight:${hxBetter?700:400};${hxBetter?"background:#e6fff2;":""}">${d?.hxNet?d.hxNet.toFixed(2):"—"}</td>`;
+          html+=`<td style="font-weight:${compBetter?700:400};${compBetter?"background:#ffe6ea;":""}">${comp?.net?comp.net.toFixed(2):"—"}</td>`;
+        });
+        html+=`</tr>`;
+      });
+      html+=`</tbody></table></div></div>`;
+
+      // Page break between competitors
+      if (parAnalysis.competitors.indexOf(compName) < parAnalysis.competitors.length - 1) {
+        html+=`<div class="page-break"></div>`;
+      }
+    }
+  }
+
   html+=`<div class="footer"><span>HomeXpress Mortgage · Pricing Comparison Engine · Confidential</span><span>${ts}</span></div></body></html>`;
   const win=window.open("","_blank");win.document.write(html);win.document.close();setTimeout(()=>{win.print();},500);
 }
@@ -433,7 +564,7 @@ export default function App(){
   const hxN=names.find(n=>/hx|homex/i.test(n))||names[0];
   const hx=results.find(r=>r.lender===hxN);const best=results[0];
 
-  const parAnalysis=useMemo(()=>(lenders&&showPar)?calcParAnalysis(lenders,params,config,hxN):null,[lenders,params,config,hxN,showPar]);
+  const parAnalysis=useMemo(()=>lenders?calcParAnalysis(lenders,params,config,hxN):null,[lenders,params,config,hxN]);
 
   const Sel=({l,v,fn,opts,w})=>(<div style={{minWidth:w||100}}><div style={{fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:1.5,marginBottom:3,fontWeight:600}}>{l}</div><select value={v} onChange={e=>fn(e.target.value)} style={{width:"100%",padding:"6px 8px",background:T.sf,color:T.text,border:`1px solid ${T.border}`,borderRadius:2,fontSize:12,fontFamily:T.sans,outline:"none"}}>{opts.map(o=><option key={o.v??o} value={o.v??o}>{o.l??o}</option>)}</select></div>);
   const Tog=({l,v,fn})=>(<div style={{minWidth:75}}><div style={{fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:1.5,marginBottom:3,fontWeight:600}}>{l}</div><button onClick={()=>fn(v==="Yes"?"No":"Yes")} style={{width:"100%",padding:"6px 8px",background:v==="Yes"?T.accentDim:T.sf,color:v==="Yes"?T.accent:T.muted,border:`1px solid ${v==="Yes"?T.accent+"44":T.border}`,borderRadius:2,fontSize:11,cursor:"pointer",fontWeight:600,fontFamily:T.sans}}>{v==="Yes"?"● YES":"○ NO"}</button></div>);
@@ -491,7 +622,7 @@ export default function App(){
               <button onClick={()=>{setShowBuydown(!showBuydown);setShowPar(false);}} style={{padding:"8px 20px",background:showBuydown?T.blue:T.bg,color:showBuydown?T.bg:T.muted,border:`1px solid ${showBuydown?T.blue:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>BUYDOWN</button>
               <button onClick={()=>{setShowPar(!showPar);setShowBuydown(false);}} style={{padding:"8px 20px",background:showPar?"#a78bfa":T.bg,color:showPar?T.bg:T.muted,border:`1px solid ${showPar?"#a78bfa":T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>PAR ANALYSIS</button>
               <div style={{flex:1}}/>
-              <button onClick={()=>exportPDF(results,matrix,buydown,config,params,lenders,view,hxN)} style={{padding:"8px 16px",background:"transparent",color:T.accent,border:`1px solid ${T.accent}44`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ PDF REPORT</button>
+              <button onClick={()=>exportPDF(results,matrix,buydown,parAnalysis,config,params,lenders,view,hxN)} style={{padding:"8px 16px",background:"transparent",color:T.accent,border:`1px solid ${T.accent}44`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ PDF REPORT</button>
               <button onClick={()=>exportXLSX(results,params,best)} style={{padding:"8px 16px",background:"transparent",color:T.muted,border:`1px solid ${T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ XLSX</button>
             </div>
 
@@ -712,3 +843,4 @@ export default function App(){
     </div>
   );
 }
+           
