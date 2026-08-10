@@ -24,7 +24,7 @@ const TradingViewCalendar = memo(function TradingViewCalendar() {
     container.current.appendChild(script);
   }, []);
   return (
-    <div className="tradingview-widget-container" ref={container} style={{height:400}}>
+    <div className="tradingview-widget-container" ref={container} style={{height:"100%"}}>
       <div className="tradingview-widget-container__widget" style={{height:"100%"}}></div>
       <div className="tradingview-widget-copyright" style={{fontSize:10,padding:"4px 14px",color:"#666"}}>
         <a href="https://www.tradingview.com/economic-calendar/" rel="noopener nofollow" target="_blank" style={{color:"#4da6ff",textDecoration:"none"}}>Economic Calendar</a>
@@ -33,6 +33,57 @@ const TradingViewCalendar = memo(function TradingViewCalendar() {
     </div>
   );
 });
+
+const TradingViewNewsFeed = memo(function TradingViewNewsFeed() {
+  const container = useRef();
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-timeline.js";
+    script.type = "text/javascript";
+    script.async = true;
+    script.innerHTML = `
+      {
+        "displayMode": "regular",
+        "feedMode": "all_symbols",
+        "colorTheme": "dark",
+        "isTransparent": false,
+        "locale": "en",
+        "width": "100%",
+        "height": "100%"
+      }`;
+    container.current.appendChild(script);
+  }, []);
+  return (
+    <div className="tradingview-widget-container" ref={container} style={{height:"100%"}}>
+      <div className="tradingview-widget-container__widget" style={{height:"100%"}}></div>
+      <div className="tradingview-widget-copyright" style={{fontSize:10,padding:"4px 14px",color:"#666"}}>
+        <a href="https://www.tradingview.com/news/top-providers/tradingview/" rel="noopener nofollow" target="_blank" style={{color:"#4da6ff",textDecoration:"none"}}>Top stories</a>
+        <span> by TradingView</span>
+      </div>
+    </div>
+  );
+});
+
+function MarketWidgets() {
+  return (
+    <div style={{marginTop:20,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+      <div style={{border:`1px solid ${T.border}`,borderRadius:2,overflow:"hidden"}}>
+        <div style={{padding:"10px 14px",background:T.card,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:T.muted}}>ECONOMIC CALENDAR</span>
+          <span style={{fontSize:9,color:T.dark,letterSpacing:1}}>— U.S. HIGH IMPACT</span>
+        </div>
+        <div style={{height:450}}><TradingViewCalendar /></div>
+      </div>
+      <div style={{border:`1px solid ${T.border}`,borderRadius:2,overflow:"hidden"}}>
+        <div style={{padding:"10px 14px",background:T.card,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:T.muted}}>MARKET NEWS</span>
+          <span style={{fontSize:9,color:T.dark,letterSpacing:1}}>— TOP STORIES</span>
+        </div>
+        <div style={{height:450}}><TradingViewNewsFeed /></div>
+      </div>
+    </div>
+  );
+}
 
 /* ═══════════════════════════════════════════════════════════════
    THEME
@@ -347,6 +398,7 @@ export default function App(){
             <div style={{fontSize:14,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>INITIALIZE SYSTEM</div>
             <div style={{fontSize:12,color:T.muted,maxWidth:400,margin:"0 auto",lineHeight:1.8}}>Upload a competitor template (.xlsx) to begin analysis.</div>
           </div>
+          <MarketWidgets />
         ):(
           <>
             {/* PARAMETERS */}
