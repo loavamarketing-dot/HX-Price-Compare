@@ -582,10 +582,23 @@ function parseQuickEntry(text, existingLender) {
    ═══════════════════════════════════════════════════════════════ */
 export default function App(){
   const urlP=readParams();
-  const[lenders,setLenders]=useState(null);
+  const[programs,setPrograms]=useState({});  // { "PrimeX Consumer": {lenders, product, file}, "InvestorX DSCR": {...} }
+  const[activeProgram,setActiveProgram]=useState(null);
   const[product,setProduct]=useState("consumer");
   const[view,setView]=useState(urlP._view||"ranking");
   const[file,setFile]=useState("");
+
+  // Derived: active lenders from selected program
+  const lenders = activeProgram && programs[activeProgram] ? programs[activeProgram].lenders : null;
+  const setLenders = (fn) => {
+    if (!activeProgram) return;
+    setPrograms(prev => {
+      const current = prev[activeProgram];
+      if (!current) return prev;
+      const newLenders = typeof fn === "function" ? fn(current.lenders) : fn;
+      return { ...prev, [activeProgram]: { ...current, lenders: newLenders } };
+    });
+  };
   const[showBuydown,setShowBuydown]=useState(false);
   const[showPar,setShowPar]=useState(false);
   const[showQueue,setShowQueue]=useState(false);
@@ -604,14 +617,22 @@ export default function App(){
     lpc:"",impoundWaiver:"No",housing1x30:"No",rural:"No",foreignNational:"No",str:"No",
   });
 
-  const config=CONFIGS[product];
+  const config=CONFIGS[activeProgram&&programs[activeProgram]?programs[activeProgram].product:product]||CONFIGS.consumer;
   const set=(k,v)=>{setParams(p=>{const next={...p,[k]:v};return next;});};
   const[dragging,setDragging]=useState(false);
 
   // Sync URL
   useEffect(()=>{if(lenders)writeParams(params,view);},[params,view,lenders]);
 
-  const processFile=useCallback(f=>{if(!f)return;setFile(f.name);const rd=new FileReader();rd.onload=ev=>{const{lenders:l,product:p}=parseFile(new Uint8Array(ev.target.result));setLenders(l);setProduct(p);};rd.readAsArrayBuffer(f);},[]);
+  const processFile=useCallback(f=>{if(!f)return;setFile(f.name);const rd=new FileReader();rd.onload=ev=>{
+    const{lenders:l,product:p}=parseFile(new Uint8Array(ev.target.result));
+    const progName=f.name.replace(/\.xlsx?$/i,"").replace(/competitor_template_?/i,"").replace(/_/g," ").trim()||CONFIGS[p]?.label||"Program";
+    // Auto-name from file or detected product
+    const displayName = progName.length > 2 ? progName : CONFIGS[p]?.label || progName;
+    setPrograms(prev=>({...prev,[displayName]:{lenders:l,product:p,file:f.name}}));
+    setActiveProgram(displayName);
+    setProduct(p);
+  };rd.readAsArrayBuffer(f);},[]);
   const onUpload=useCallback(e=>{processFile(e.target.files[0]);},[processFile]);
   const onDrop=useCallback(e=>{e.preventDefault();e.stopPropagation();setDragging(false);const f=e.dataTransfer?.files?.[0];if(f&&/\.xlsx?$/i.test(f.name))processFile(f);},[processFile]);
   const onDragOver=useCallback(e=>{e.preventDefault();e.stopPropagation();setDragging(true);},[]);
@@ -639,7 +660,7 @@ export default function App(){
       <div style={{borderBottom:`1px solid ${T.border}`,padding:"14px 28px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div style={{display:"flex",alignItems:"center",gap:14}}>
           <div style={{display:"flex",gap:2}}>{[0,1,2].map(i=><div key={i} style={{width:4,height:20,background:T.accent,opacity:1-i*0.3,borderRadius:1}}/>)}</div>
-          <div><div style={{fontSize:15,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase"}}>Pricing Engine</div><div style={{fontSize:10,color:T.muted,letterSpacing:2,textTransform:"uppercase",marginTop:1}}>{lenders?`${names.length} LENDERS · ${config.label}`:"AWAITING TEMPLATE"}</div></div>
+          <div><div style={{fontSize:15,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase"}}>Pricing Engine</div><div style={{fontSize:10,color:T.muted,letterSpacing:2,textTransform:"uppercase",marginTop:1}}>{Object.keys(programs).length?`${Object.keys(programs).length} PROGRAM${Object.keys(programs).length>1?"S":""} · ${names.length} LENDERS`:"AWAITING TEMPLATE"}</div></div>
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center"}}>
           {lenders&&<span style={{border:`1px solid ${T.accent}44`,color:T.accent,padding:"3px 12px",borderRadius:2,fontSize:10,fontWeight:600,letterSpacing:1.5}}>{config.label}</span>}
@@ -649,6 +670,30 @@ export default function App(){
       </div>
 
       <div style={{maxWidth:1500,margin:"0 auto",padding:"20px 28px"}}>
+
+        {/* PROGRAM SELECTOR BAR */}
+        {Object.keys(programs).length>0&&(
+          <div style={{display:"flex",gap:4,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{fontSize:9,color:T.muted,letterSpacing:2,textTransform:"uppercase",fontWeight:700,marginRight:8}}>PROGRAMS</span>
+            {Object.entries(programs).map(([name,prog])=>{
+              const isActive=name===activeProgram;
+              const pConfig=CONFIGS[prog.product]||CONFIGS.consumer;
+              const lenderCount=Object.keys(prog.lenders).length;
+              return(
+                <button key={name} onClick={()=>{setActiveProgram(name);setProduct(prog.product);}} style={{padding:"6px 14px",background:isActive?T.accent:T.card,color:isActive?T.bg:T.sub,border:`1px solid ${isActive?T.accent:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:isActive?700:500,letterSpacing:0.5,display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{width:6,height:6,borderRadius:1,background:prog.product==="dscr"?T.orange:prog.product==="consumer"?T.accent:T.purple,opacity:isActive?1:0.5}}/>
+                  {name}
+                  <span style={{fontSize:8,color:isActive?T.bg:T.dark,opacity:0.7}}>({lenderCount})</span>
+                </button>
+              );
+            })}
+            <button onClick={()=>document.getElementById("file-input-header")?.click()} style={{padding:"6px 14px",background:"transparent",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:600,letterSpacing:0.5}}>+ ADD PROGRAM</button>
+            <input id="file-input-header" type="file" accept=".xlsx,.xls" onChange={onUpload} style={{display:"none"}}/>
+            {Object.keys(programs).length>1&&activeProgram&&(
+              <button onClick={()=>{setPrograms(prev=>{const next={...prev};delete next[activeProgram];return next;});setActiveProgram(Object.keys(programs).filter(k=>k!==activeProgram)[0]||null);}} style={{marginLeft:"auto",padding:"6px 12px",background:"transparent",color:T.red,border:`1px solid ${T.red}33`,borderRadius:2,cursor:"pointer",fontSize:9,fontWeight:700,letterSpacing:1}}>REMOVE {activeProgram.toUpperCase()}</button>
+            )}
+          </div>
+        )}
 
         {/* QUICK ENTRY MODAL */}
         {showQuickEntry&&(
@@ -715,7 +760,7 @@ export default function App(){
         )}
         {!lenders?(
           <>
-          <div onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave} style={{textAlign:"center",padding:"80px 20px",border:`2px dashed ${dragging?T.accent:T.border}`,borderRadius:2,marginTop:40,background:dragging?T.accentDim:"transparent",transition:"all .2s",cursor:"pointer"}} onClick={()=>document.getElementById("file-input").click()}>
+          <div onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave} style={{textAlign:"center",padding:"80px 20px",border:`2px dashed ${dragging?T.accent:T.border}`,borderRadius:2,marginTop:Object.keys(programs).length?0:40,background:dragging?T.accentDim:"transparent",transition:"all .2s",cursor:"pointer"}} onClick={()=>document.getElementById("file-input").click()}>
             <input id="file-input" type="file" accept=".xlsx,.xls" onChange={onUpload} style={{display:"none"}}/>
             <div style={{width:60,height:60,border:`2px solid ${dragging?T.accent:T.border}`,borderRadius:2,margin:"0 auto 20px",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}><span style={{fontSize:24,color:T.accent}}>{dragging?"↓":"↑"}</span></div>
             <div style={{fontSize:14,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>{dragging?"DROP FILE HERE":"INITIALIZE SYSTEM"}</div>
@@ -971,4 +1016,4 @@ export default function App(){
     </div>
   );
 }
-     
+                
