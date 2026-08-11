@@ -116,6 +116,7 @@ function readParams() {
   if (u.get("property")) p.propertyType = u.get("property");
   if (u.get("io")) p.interestOnly = u.get("io");
   if (u.get("selfEmp")) p.selfEmployed = u.get("selfEmp");
+  if (u.get("lpc")) p.lpc = u.get("lpc");
   if (u.get("income")) p.incomeDoc = u.get("income");
   if (u.get("view")) p._view = u.get("view");
   return p;
@@ -172,6 +173,8 @@ function calcNet(lender,p){
   if(p.str==="Yes"){const{name,value}=findLlpa(lender.llpas,["Short Term","STR"],ltvB);if(value)adjs.push({cat:"STR",name,value});}
   if(p.foreignNational==="Yes"){const{name,value}=findLlpa(lender.llpas,["Foreign"],ltvB);if(value)adjs.push({cat:"Foreign",name,value});}
   const dti=findLlpa(lender.llpas,["DTI <= 43%","DTI"],ltvB);if(dti.value)adjs.push({cat:"DTI",name:dti.name,value:dti.value});
+  // LPC (Lender Paid Comp) — applied as a direct price adjustment
+  if(p.lpc){const lpcVal=parseFloat(p.lpc);if(!isNaN(lpcVal)&&lpcVal!==0)adjs.push({cat:"LPC",name:"Lender Paid Comp",value:-Math.abs(lpcVal)});}
   r.totalAdj=+(adjs.reduce((s,a)=>s+a.value,0)).toFixed(3);r.net=+(r.base+r.totalAdj).toFixed(3);return r;
 }
 
@@ -474,6 +477,17 @@ function exportParPDF(parAnalysis, config, params, lenders, hxN) {
   h+=`<div class="exec"><strong>Executive Summary:</strong> Across ${tn} scenario comparisons against ${competitors.length} competitor(s), HomeXpress wins <strong>${owp}%</strong> of matchups with an average price advantage of <strong>${oa>=0?"+":""}${oa}</strong> points. HX is strongest at <strong>FICO ${fr[0].f}</strong> (avg +${fr[0].avg}) and <strong>${lr[0].l}% LTV</strong> (avg +${lr[0].avg}).`;
   if(fr[fr.length-1].avg<0) h+=` Vulnerability at <strong>FICO ${fr[fr.length-1].f}</strong> (avg ${fr[fr.length-1].avg}) and <strong>${lr[lr.length-1].l}% LTV</strong> (avg ${lr[lr.length-1].avg}).`;
   if(threat) h+=` Primary threat: <strong>${threat[0]}</strong> (${threat[1].wp}% HX win rate).`;
+
+  // Prescriptive recommendation
+  const ficoLosses=fr.filter(f=>f.avg<0);
+  if(ficoLosses.length){
+    const worst=ficoLosses[ficoLosses.length-1];
+    const improvementNeeded=Math.abs(worst.avg);
+    const scenariosFlipped=worst.l;
+    const newWins=tw+scenariosFlipped;
+    const newWinPct=tn?Math.round(newWins/tn*100):0;
+    h+=`</div><div class="exec" style="border-left-color:#cc8800"><strong>Recommendation:</strong> Improving the FICO ${worst.f} LLPA by approximately <strong>${improvementNeeded.toFixed(3)} pts</strong> across ${lr.filter(l=>l.avg<0).length>0?lr.filter(l=>l.avg<0).map(l=>l.l+"%").join(", "):"vulnerable"} LTV bands would flip up to <strong>${scenariosFlipped} scenarios</strong> from loss to win, increasing overall win rate from <strong>${owp}%</strong> to approximately <strong>${newWinPct}%</strong>.`;
+  }
   h+=`</div>`;
 
   h+=`<div class="params">`;
@@ -535,6 +549,34 @@ function exportParPDF(parAnalysis, config, params, lenders, hxN) {
   const w=window.open("","_blank");w.document.write(h);w.document.close();setTimeout(()=>{w.print();},500);
 }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   QUICK ENTRY — Parse pasted rate stack text
+   ═══════════════════════════════════════════════════════════════ */
+function parseQuickEntry(text, existingLender) {
+  const lines = text.trim().split("\n").filter(l => l.trim());
+  const rates = {};
+  for (const line of lines) {
+    const parts = line.split(/\t|\s{2,}|,/).map(s => s.trim().replace("%",""));
+    if (parts.length >= 2) {
+      const rate = parseFloat(parts[0]);
+      if (!isNaN(rate) && rate > 3 && rate < 15) {
+        const prices = {};
+        if (parts[1] && !isNaN(parseFloat(parts[1])) && parseFloat(parts[1]) > 50) prices["15"] = parseFloat(parts[1]);
+        if (parts[2] && !isNaN(parseFloat(parts[2])) && parseFloat(parts[2]) > 50) prices["30"] = parseFloat(parts[2]);
+        if (parts[3] && !isNaN(parseFloat(parts[3])) && parseFloat(parts[3]) > 50) prices["45"] = parseFloat(parts[3]);
+        // If only one price column, use it for all locks
+        if (Object.keys(prices).length === 1) { const v = Object.values(prices)[0]; prices["15"] = v; prices["30"] = v; prices["45"] = v; }
+        if (Object.keys(prices).length) rates[rate] = prices;
+      }
+    }
+  }
+  if (existingLender) {
+    return { ...existingLender, rates: { ...existingLender.rates, ...rates } };
+  }
+  return { name: "Quick Entry", rates, llpas: {} };
+}
+
 /* ═══════════════════════════════════════════════════════════════
    APP
    ═══════════════════════════════════════════════════════════════ */
@@ -546,6 +588,10 @@ export default function App(){
   const[file,setFile]=useState("");
   const[showBuydown,setShowBuydown]=useState(false);
   const[showPar,setShowPar]=useState(false);
+  const[showQueue,setShowQueue]=useState(false);
+  const[queue,setQueue]=useState([]);
+  const[showQuickEntry,setShowQuickEntry]=useState(false);
+  const[quickText,setQuickText]=useState("");
   const[params,setParams]=useState({
     rate:urlP.rate||7.25,fico:urlP.fico||720,ltv:urlP.ltv||75,lock:urlP.lock||"30",
     purpose:urlP.purpose||"Purchase",loanAmount:urlP.loanAmount||"750000",
@@ -553,7 +599,7 @@ export default function App(){
     units:"1",incomeDoc:urlP.incomeDoc||"Bank Statement",
     selfEmployed:urlP.selfEmployed||"No",interestOnly:urlP.interestOnly||"No",
     dscr:urlP.dscr||"1.00",ppp:urlP.ppp||"3 Year",
-    impoundWaiver:"No",housing1x30:"No",rural:"No",foreignNational:"No",str:"No",
+    lpc:"",impoundWaiver:"No",housing1x30:"No",rural:"No",foreignNational:"No",str:"No",
   });
 
   const config=CONFIGS[product];
@@ -595,6 +641,7 @@ export default function App(){
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center"}}>
           {lenders&&<span style={{border:`1px solid ${T.accent}44`,color:T.accent,padding:"3px 12px",borderRadius:2,fontSize:10,fontWeight:600,letterSpacing:1.5}}>{config.label}</span>}
+          <button onClick={()=>setShowQuickEntry(!showQuickEntry)} style={{background:"transparent",color:T.muted,border:`1px solid ${T.border}`,padding:"7px 14px",borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1}}>QUICK ENTRY</button>
           <label style={{background:T.accent,color:T.bg,padding:"7px 20px",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{file?"✓ LOADED":"UPLOAD"}<input type="file" accept=".xlsx,.xls" onChange={onUpload} style={{display:"none"}}/></label>
         </div>
       </div>
@@ -617,7 +664,7 @@ export default function App(){
               {[
                 {label:"LOAN",color:T.accent,fields:<><Sel l="Rate" v={params.rate} fn={v=>set("rate",+v)} opts={rates.map(r=>({v:r,l:r.toFixed(3)+"%"}))}/><Sel l="FICO" v={params.fico} fn={v=>set("fico",+v)} opts={config.ficos}/><Sel l="LTV" v={params.ltv} fn={v=>set("ltv",+v)} opts={config.ltvs.map(l=>({v:l,l:l+"%"}))}/><Inp l="Loan Amount" v={params.loanAmount} fn={v=>set("loanAmount",v)} ph="750000" w={115}/><Sel l="Lock" v={params.lock} fn={v=>set("lock",v)} opts={[{v:"15",l:"15 DAY"},{v:"30",l:"30 DAY"},{v:"45",l:"45 DAY"}]} w={80}/><Sel l="Purpose" v={params.purpose} fn={v=>set("purpose",v)} opts={["Purchase","Rate/Term Refi","Cash-Out"]}/></>},
                 {label:"PROPERTY",color:T.green,fields:<><Sel l="Type" v={params.propertyType} fn={v=>set("propertyType",v)} opts={["Single Family","Condo","PUD","2-4 Units"]}/><Sel l="Occupancy" v={params.occupancy} fn={v=>set("occupancy",v)} opts={product==="dscr"?["Investment","Non-Owner"]:["Primary","Second Home","Investment"]}/><Sel l="Units" v={params.units} fn={v=>set("units",v)} opts={["1","2","3-4"]} w={60}/><Tog l="Rural" v={params.rural} fn={v=>set("rural",v)}/>{product==="dscr"&&<Tog l="STR" v={params.str} fn={v=>set("str",v)}/>}</>},
-                {label:"BORROWER",color:T.orange,fields:<><Sel l="Income Doc" v={params.incomeDoc} fn={v=>set("incomeDoc",v)} opts={product==="dscr"?["DSCR","Full Doc","Alt Doc","Asset Xpress","Bank Statement"]:["Bank Statement","Full Doc","Asset Xpress"]}/><Tog l="Self Emp" v={params.selfEmployed} fn={v=>set("selfEmployed",v)}/><Tog l="I/O" v={params.interestOnly} fn={v=>set("interestOnly",v)}/><Tog l="Impound" v={params.impoundWaiver} fn={v=>set("impoundWaiver",v)}/>{product==="dscr"&&<Tog l="Foreign" v={params.foreignNational} fn={v=>set("foreignNational",v)}/>}</>},
+                {label:"BORROWER",color:T.orange,fields:<><Inp l="LPC" v={params.lpc} fn={v=>set("lpc",v)} ph="0.000" w={80}/><Sel l="Income Doc" v={params.incomeDoc} fn={v=>set("incomeDoc",v)} opts={product==="dscr"?["DSCR","Full Doc","Alt Doc","Asset Xpress","Bank Statement"]:["Bank Statement","Full Doc","Asset Xpress"]}/><Tog l="Self Emp" v={params.selfEmployed} fn={v=>set("selfEmployed",v)}/><Tog l="I/O" v={params.interestOnly} fn={v=>set("interestOnly",v)}/><Tog l="Impound" v={params.impoundWaiver} fn={v=>set("impoundWaiver",v)}/>{product==="dscr"&&<Tog l="Foreign" v={params.foreignNational} fn={v=>set("foreignNational",v)}/>}</>},
                 ...(product==="dscr"?[{label:"DSCR",color:T.purple,fields:<><Sel l="DSCR Ratio" v={params.dscr} fn={v=>set("dscr",v)} opts={["1.25","1.00","0.85","0.75","No DSCR"]}/><Sel l="Prepay Penalty" v={params.ppp} fn={v=>set("ppp",v)} opts={["5 Year","4 Year","3 Year","2 Year","1 Year","No Prepay","None"]}/></>}]:[]),
               ].map(({label,color,fields},i)=>(
                 <div key={i} style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end"}}>
@@ -633,7 +680,8 @@ export default function App(){
                 <button key={k} onClick={()=>setView(k)} style={{padding:"8px 20px",background:view===k?T.accent:T.bg,color:view===k?T.bg:T.muted,border:`1px solid ${view===k?T.accent:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>{l}</button>
               ))}
               <button onClick={()=>{setShowBuydown(!showBuydown);setShowPar(false);}} style={{padding:"8px 20px",background:showBuydown?T.blue:T.bg,color:showBuydown?T.bg:T.muted,border:`1px solid ${showBuydown?T.blue:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>BUYDOWN</button>
-              <button onClick={()=>{setShowPar(!showPar);setShowBuydown(false);}} style={{padding:"8px 20px",background:showPar?"#a78bfa":T.bg,color:showPar?T.bg:T.muted,border:`1px solid ${showPar?"#a78bfa":T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>PAR ANALYSIS</button>
+              <button onClick={()=>{setShowPar(!showPar);setShowBuydown(false);setShowQueue(false);}} style={{padding:"8px 20px",background:showPar?"#a78bfa":T.bg,color:showPar?T.bg:T.muted,border:`1px solid ${showPar?"#a78bfa":T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>PAR ANALYSIS</button>
+              <button onClick={()=>{setShowQueue(!showQueue);setShowBuydown(false);setShowPar(false);}} style={{padding:"8px 20px",background:showQueue?T.amber:T.bg,color:showQueue?T.bg:T.muted,border:`1px solid ${showQueue?T.amber:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>QUEUE</button>
               <div style={{flex:1}}/>
               {showPar&&parAnalysis&&<button onClick={()=>exportParPDF(parAnalysis,config,params,lenders,hxN)} style={{padding:"8px 16px",background:"#a78bfa22",color:"#a78bfa",border:"1px solid #a78bfa44",borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ PAR REPORT PDF</button>}
               <button onClick={()=>exportPDF(results,matrix,buydown,config,params,lenders,view,hxN)} style={{padding:"8px 16px",background:"transparent",color:T.accent,border:`1px solid ${T.accent}44`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ PDF REPORT</button>
