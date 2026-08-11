@@ -647,6 +647,22 @@ export default function App(){
       </div>
 
       <div style={{maxWidth:1500,margin:"0 auto",padding:"20px 28px"}}>
+
+        {/* QUICK ENTRY MODAL — always rendered */}
+        {showQuickEntry&&(
+          <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.85)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShowQuickEntry(false)}>
+            <div onClick={e=>e.stopPropagation()} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:2,padding:24,width:640,maxHeight:"80vh",overflow:"auto"}}>
+              <div style={{fontSize:14,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>QUICK ENTRY</div>
+              <div style={{fontSize:10,color:T.muted,marginBottom:14,lineHeight:1.6}}>Paste a rate/price table from a competitor's rate sheet. Accepts tab, comma, or space-separated values. Format: Rate, 15-Day, 30-Day, 45-Day.</div>
+              <textarea value={quickText} onChange={e=>setQuickText(e.target.value)} placeholder={"6.125\t97.438\t97.438\t97.313\n6.250\t97.938\t97.938\t97.813\n6.375\t98.313\t98.313\t98.188\n6.500\t98.688\t98.688\t98.563"} style={{width:"100%",height:220,background:T.sf,color:T.text,border:`1px solid ${T.border}`,borderRadius:2,padding:12,fontFamily:T.mono,fontSize:11,boxSizing:"border-box",resize:"vertical",outline:"none"}}/>
+              {quickText&&(()=>{const p=parseQuickEntry(quickText);const n=Object.keys(p.rates).length;return <div style={{marginTop:8,marginBottom:8,fontSize:11,color:n>0?T.green:T.red,fontWeight:600}}>{n>0?`✓ ${n} rates parsed successfully`:"✗ No valid rates detected — check format"}</div>;})()}
+              <div style={{display:"flex",gap:8,marginTop:10}}>
+                <button onClick={()=>{if(!quickText.trim())return;const parsed=parseQuickEntry(quickText);const name=prompt("Enter competitor name:","Competitor_New");if(!name)return;parsed.name=name;setLenders(prev=>({...(prev||{}),[name]:parsed}));setShowQuickEntry(false);setQuickText("");}} style={{flex:1,padding:"10px 16px",background:T.accent,color:T.bg,border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:700,letterSpacing:1}}>ADD AS NEW LENDER</button>
+                <button onClick={()=>setShowQuickEntry(false)} style={{padding:"10px 16px",background:"transparent",color:T.muted,border:`1px solid ${T.border}`,borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:700,letterSpacing:1}}>CANCEL</button>
+              </div>
+            </div>
+          </div>
+        )}
         {!lenders?(
           <>
           <div onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave} style={{textAlign:"center",padding:"80px 20px",border:`2px dashed ${dragging?T.accent:T.border}`,borderRadius:2,marginTop:40,background:dragging?T.accentDim:"transparent",transition:"all .2s",cursor:"pointer"}} onClick={()=>document.getElementById("file-input").click()}>
