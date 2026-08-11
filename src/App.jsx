@@ -500,16 +500,6 @@ function exportParPDF(parAnalysis, config, params, lenders, hxN) {
   [{l:"WIN RATE",v:owp+"%",c:owp>=50?"#006633":"#cc2244",s:tw+" of "+tn},{l:"AVG ADVANTAGE",v:(oa>=0?"+":"")+oa,c:oa>=0?"#006633":"#cc2244",s:"all competitors"},{l:"WINS",v:tw,c:"#006633",s:"vs "+tl+" losses"},{l:"STRONGEST FICO",v:fr[0].f,c:"#006633",s:"avg +"+fr[0].avg},{l:"WEAKEST FICO",v:fr[fr.length-1].f,c:fr[fr.length-1].avg<0?"#cc2244":"#666",s:"avg "+fr[fr.length-1].avg}].forEach(({l,v,c,s})=>{h+=`<div class="k"><div class="kl">${l}</div><div class="kv" style="color:${c}">${v}</div><div class="ks">${s}</div></div>`;});
   h+=`</div>`;
 
-  // FICO segments
-  h+=`<h3>Performance by FICO</h3><div class="sg">`;
-  fr.forEach(f=>{const p=f.n?Math.round(f.w/f.n*100):0;const bc=p>=60?"#006633":p>=40?"#cc8800":"#cc2244";h+=`<div class="sb"><div class="sl">FICO ${f.f}</div><div class="sv" style="color:${f.avg>=0?"#006633":"#cc2244"}">${f.avg>=0?"+":""}${f.avg}</div><div style="font-size:8px;color:#999">${p}% (${f.w}W/${f.l}L)</div><div style="height:4px;border-radius:2px;margin-top:4px;background:linear-gradient(90deg,${bc} ${p}%,#eee ${p}%)"></div></div>`;});
-  h+=`</div>`;
-
-  // LTV segments
-  h+=`<h3>Performance by LTV</h3><div class="sg">`;
-  lr.forEach(l=>{const p=l.n?Math.round(l.w/l.n*100):0;const bc=p>=60?"#006633":p>=40?"#cc8800":"#cc2244";h+=`<div class="sb"><div class="sl">${l.l}% LTV</div><div class="sv" style="color:${l.avg>=0?"#006633":"#cc2244"}">${l.avg>=0?"+":""}${l.avg}</div><div style="font-size:8px;color:#999">${p}% (${l.w}W/${l.l}L)</div><div style="height:4px;border-radius:2px;margin-top:4px;background:linear-gradient(90deg,${bc} ${p}%,#eee ${p}%)"></div></div>`;});
-  h+=`</div>`;
-
   // Scorecard
   h+=`<h3>Competitor Scorecard</h3><table><thead><tr><th style="text-align:left">Competitor</th><th>Win Rate</th><th>Wins</th><th>Losses</th><th>Avg Diff</th><th>Best</th><th>Worst</th><th>Scenarios</th></tr></thead><tbody>`;
   Object.entries(overallStats).sort((a,b)=>b[1].avg-a[1].avg).forEach(([n,s])=>{h+=`<tr><td style="text-align:left;font-weight:700">${n}</td><td class="${s.wp>=50?"pos":"neg"}">${s.wp}%</td><td class="pos">${s.w}</td><td class="neg">${s.l}</td><td class="${s.avg>=0?"pos":"neg"}">${s.avg>=0?"+":""}${s.avg}</td><td class="pos">+${s.best.toFixed(3)}</td><td class="neg">${s.worst.toFixed(3)}</td><td>${s.n}</td></tr>`;});
