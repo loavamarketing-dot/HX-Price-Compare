@@ -592,6 +592,8 @@ export default function App(){
   const[queue,setQueue]=useState([]);
   const[showQuickEntry,setShowQuickEntry]=useState(false);
   const[quickText,setQuickText]=useState("");
+  const[quickTarget,setQuickTarget]=useState("__new__");
+  const[quickNewName,setQuickNewName]=useState("");
   const[params,setParams]=useState({
     rate:urlP.rate||7.25,fico:urlP.fico||720,ltv:urlP.ltv||75,lock:urlP.lock||"30",
     purpose:urlP.purpose||"Purchase",loanAmount:urlP.loanAmount||"750000",
@@ -648,18 +650,66 @@ export default function App(){
 
       <div style={{maxWidth:1500,margin:"0 auto",padding:"20px 28px"}}>
 
-        {/* QUICK ENTRY MODAL — always rendered */}
+        {/* QUICK ENTRY MODAL */}
         {showQuickEntry&&(
           <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.85)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShowQuickEntry(false)}>
             <div onClick={e=>e.stopPropagation()} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:2,padding:24,width:640,maxHeight:"80vh",overflow:"auto"}}>
-              <div style={{fontSize:14,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>QUICK ENTRY</div>
-              <div style={{fontSize:10,color:T.muted,marginBottom:14,lineHeight:1.6}}>Paste a rate/price table from a competitor's rate sheet. Accepts tab, comma, or space-separated values. Format: Rate, 15-Day, 30-Day, 45-Day.</div>
-              <textarea value={quickText} onChange={e=>setQuickText(e.target.value)} placeholder={"6.125\t97.438\t97.438\t97.313\n6.250\t97.938\t97.938\t97.813\n6.375\t98.313\t98.313\t98.188\n6.500\t98.688\t98.688\t98.563"} style={{width:"100%",height:220,background:T.sf,color:T.text,border:`1px solid ${T.border}`,borderRadius:2,padding:12,fontFamily:T.mono,fontSize:11,boxSizing:"border-box",resize:"vertical",outline:"none"}}/>
-              {quickText&&(()=>{const p=parseQuickEntry(quickText);const n=Object.keys(p.rates).length;return <div style={{marginTop:8,marginBottom:8,fontSize:11,color:n>0?T.green:T.red,fontWeight:600}}>{n>0?`✓ ${n} rates parsed successfully`:"✗ No valid rates detected — check format"}</div>;})()}
-              <div style={{display:"flex",gap:8,marginTop:10}}>
-                <button onClick={()=>{if(!quickText.trim())return;const parsed=parseQuickEntry(quickText);const name=prompt("Enter competitor name:","Competitor_New");if(!name)return;parsed.name=name;setLenders(prev=>({...(prev||{}),[name]:parsed}));setShowQuickEntry(false);setQuickText("");}} style={{flex:1,padding:"10px 16px",background:T.accent,color:T.bg,border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:700,letterSpacing:1}}>ADD AS NEW LENDER</button>
+              <div style={{fontSize:14,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>QUICK ENTRY — RATE STACK</div>
+              <div style={{fontSize:10,color:T.muted,marginBottom:14,lineHeight:1.6}}>Paste a rate/price table from a competitor's rate sheet. Select which lender to apply it to, or create a new one.</div>
+
+              {/* Target Lender Selector */}
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:1.5,marginBottom:4,fontWeight:600}}>TARGET LENDER</div>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                  {names.map(n=>(
+                    <button key={n} onClick={()=>setQuickTarget(n)} style={{padding:"6px 14px",background:quickTarget===n?T.accent+"22":"transparent",color:quickTarget===n?T.accent:T.muted,border:`1px solid ${quickTarget===n?T.accent+"66":T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:600,letterSpacing:0.5}}>{n}</button>
+                  ))}
+                  <button onClick={()=>setQuickTarget("__new__")} style={{padding:"6px 14px",background:quickTarget==="__new__"?T.green+"22":"transparent",color:quickTarget==="__new__"?T.green:T.muted,border:`1px solid ${quickTarget==="__new__"?T.green+"66":T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:0.5}}>+ NEW LENDER</button>
+                </div>
+              </div>
+
+              {quickTarget==="__new__"&&(
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:1.5,marginBottom:4,fontWeight:600}}>LENDER NAME</div>
+                  <input value={quickNewName} onChange={e=>setQuickNewName(e.target.value)} placeholder="Enter competitor name" style={{width:"100%",padding:"7px 10px",background:T.sf,color:T.text,border:`1px solid ${T.border}`,borderRadius:2,fontSize:12,fontFamily:T.sans,outline:"none",boxSizing:"border-box"}}/>
+                </div>
+              )}
+
+              <div style={{fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:1.5,marginBottom:4,fontWeight:600}}>PASTE RATE / PRICE DATA</div>
+              <textarea value={quickText} onChange={e=>setQuickText(e.target.value)} placeholder={"6.125\t97.438\t97.438\t97.313\n6.250\t97.938\t97.938\t97.813\n6.375\t98.313\t98.313\t98.188\n6.500\t98.688\t98.688\t98.563"} style={{width:"100%",height:200,background:T.sf,color:T.text,border:`1px solid ${T.border}`,borderRadius:2,padding:12,fontFamily:T.mono,fontSize:11,boxSizing:"border-box",resize:"vertical",outline:"none"}}/>
+
+              {quickText&&(()=>{const p=parseQuickEntry(quickText);const n=Object.keys(p.rates).length;return <div style={{marginTop:8,marginBottom:4,fontSize:11,color:n>0?T.green:T.red,fontWeight:600}}>{n>0?`✓ ${n} rates parsed`:`✗ No valid rates detected`}{quickTarget&&quickTarget!=="__new__"?` — will update ${quickTarget}`:""}</div>;})()}
+
+              <div style={{display:"flex",gap:8,marginTop:12}}>
+                <button onClick={()=>{
+                  if(!quickText.trim())return;
+                  const parsed=parseQuickEntry(quickText);
+                  if(!Object.keys(parsed.rates).length)return;
+
+                  if(quickTarget==="__new__"){
+                    const name=quickNewName.trim()||("Competitor_"+Date.now().toString(36).slice(-4));
+                    parsed.name=name;
+                    setLenders(prev=>({...(prev||{}),[name]:parsed}));
+                  } else if(quickTarget&&lenders?.[quickTarget]){
+                    // Merge into existing lender — overwrite rates, keep LLPAs
+                    setLenders(prev=>({...prev,[quickTarget]:{...prev[quickTarget],rates:{...prev[quickTarget].rates,...parsed.rates}}}));
+                  }
+                  setShowQuickEntry(false);setQuickText("");setQuickTarget(names[0]||"__new__");setQuickNewName("");
+                }} style={{flex:1,padding:"10px 16px",background:T.accent,color:T.bg,border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:700,letterSpacing:1}}>
+                  {quickTarget==="__new__"?"ADD NEW LENDER":`UPDATE ${(quickTarget||"").toUpperCase()}`}
+                </button>
                 <button onClick={()=>setShowQuickEntry(false)} style={{padding:"10px 16px",background:"transparent",color:T.muted,border:`1px solid ${T.border}`,borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:700,letterSpacing:1}}>CANCEL</button>
               </div>
+
+              {quickTarget&&quickTarget!=="__new__"&&lenders?.[quickTarget]&&(
+                <div style={{marginTop:12,padding:10,background:T.sf,borderRadius:2,border:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:9,color:T.muted,letterSpacing:1.5,textTransform:"uppercase",fontWeight:600,marginBottom:6}}>CURRENT {quickTarget} RATES ({Object.keys(lenders[quickTarget].rates).length})</div>
+                  <div style={{fontSize:10,color:T.sub,fontFamily:T.mono,maxHeight:80,overflow:"auto",lineHeight:1.6}}>
+                    {Object.entries(lenders[quickTarget].rates).sort(([a],[b])=>a-b).slice(0,8).map(([rate,prices])=>`${(+rate).toFixed(3)}%: ${prices["30"]?.toFixed(3)||"—"}`).join(" · ")}
+                    {Object.keys(lenders[quickTarget].rates).length>8&&" ..."}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -921,3 +971,4 @@ export default function App(){
     </div>
   );
 }
+     
