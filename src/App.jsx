@@ -35,69 +35,17 @@ const TradingViewCalendar = memo(function TradingViewCalendar() {
 });
 
 const TradingViewNewsFeed = memo(function TradingViewNewsFeed() {
-  const [articles, setArticles] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function fetchNews() {
-      let items = [];
-
-      // Strategy 1: Server-side proxy (no CORS issues)
-      try {
-        const res = await fetch("/api/news", { signal: AbortSignal.timeout(10000) });
-        const data = await res.json();
-        if (data.items?.length) items = data.items;
-        else if (data.mndItems?.length) items = data.mndItems;
-      } catch(e) {
-        // Strategy 2: RSS fallback
-        try {
-          const rssRes = await fetch("https://api.rss2json.com/v1/api.json?rss_url=" + encodeURIComponent("https://www.mortgagenewsdaily.com/rss/news"), { signal: AbortSignal.timeout(6000) });
-          const rssData = await rssRes.json();
-          if (rssData?.items) {
-            rssData.items.slice(0, 25).forEach(item => {
-              const d = new Date(item.pubDate);
-              items.push({ title: item.title, link: item.link, source: item.author || "MND", time: d.toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) });
-            });
-          }
-        } catch(e2) {}
-      }
-
-      setArticles(items);
-      setLoading(false);
-    }
-    fetchNews();
-    const interval = setInterval(fetchNews, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
-
   return (
-    <div style={{height:"100%",overflow:"auto",background:T.sf}}>
-      {loading ? (
-        <div style={{padding:20,textAlign:"center",color:T.muted,fontSize:11}}>Loading mortgage news...</div>
-      ) : articles.length === 0 ? (
-        <div style={{padding:20,textAlign:"center",color:T.muted,fontSize:11}}>
-          <div style={{marginBottom:8}}>News feed unavailable</div>
-          <a href="https://www.mortgagenewsdaily.com/aroundtheweb" target="_blank" rel="noopener noreferrer" style={{color:T.hxTeal,textDecoration:"none",fontSize:12,fontWeight:600}}>Open MND Around the Web →</a>
-        </div>
-      ) : (
-        <div style={{display:"flex",flexDirection:"column"}}>
-          {articles.map((a, i) => (
-            <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" style={{
-              display:"block",padding:"9px 14px",borderBottom:`1px solid ${T.border}`,
-              textDecoration:"none",transition:"background .1s",cursor:"pointer",
-            }} onMouseEnter={e=>e.currentTarget.style.background=T.card} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <div style={{fontSize:11,color:T.text,lineHeight:1.4,fontWeight:500,marginBottom:2}}>{a.title}</div>
-              <div style={{fontSize:9,color:T.muted}}>
-                <span style={{color:T.accent,fontWeight:600}}>{a.source}</span>
-                {a.time&&<><span style={{margin:"0 5px"}}>·</span><span>{a.time}</span></>}
-              </div>
-            </a>
-          ))}
-        </div>
-      )}
-      <div style={{padding:"6px 14px",fontSize:9,color:T.dark,borderTop:`1px solid ${T.border}`}}>
+    <div style={{height:"100%",display:"flex",flexDirection:"column",background:T.sf}}>
+      <iframe
+        src="https://www.mortgagenewsdaily.com/aroundtheweb"
+        style={{flex:1,border:"none",width:"100%",background:"#fff",borderRadius:2}}
+        title="Mortgage News Daily — Around the Web"
+        sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+      />
+      <div style={{padding:"6px 14px",fontSize:9,color:T.dark,borderTop:`1px solid ${T.border}`,flexShrink:0}}>
         <a href="https://www.mortgagenewsdaily.com/aroundtheweb" target="_blank" rel="noopener noreferrer" style={{color:T.hxTeal,textDecoration:"none"}}>Mortgage News Daily — Around the Web</a>
-        <span> · {articles.length > 0 ? `${articles.length} articles · ` : ""}Refreshes every 5 min</span>
+        <span> · Live feed</span>
       </div>
     </div>
   );
