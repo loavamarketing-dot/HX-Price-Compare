@@ -908,6 +908,9 @@ export default function App(){
     setPrograms(prev=>({...prev,[displayName]:{lenders:l,product:p,file:f.name}}));
     setActiveProgram(displayName);
     setProduct(p);
+    // Set program-appropriate defaults
+    if(p==="dscr") setParams(pr=>({...pr,occupancy:"Investment",incomeDoc:"DSCR"}));
+    else setParams(pr=>({...pr,occupancy:pr.occupancy==="Investment"?"Primary":pr.occupancy,incomeDoc:pr.incomeDoc==="DSCR"?"Bank Statement":pr.incomeDoc}));
   };rd.readAsArrayBuffer(f);},[]);
   const onUpload=useCallback(e=>{processFile(e.target.files[0]);},[processFile]);
   const onDrop=useCallback(e=>{e.preventDefault();e.stopPropagation();setDragging(false);const f=e.dataTransfer?.files?.[0];if(f&&/\.xlsx?$/i.test(f.name))processFile(f);},[processFile]);
@@ -957,7 +960,15 @@ export default function App(){
               const pConfig=CONFIGS[prog.product]||CONFIGS.consumer;
               const lenderCount=Object.keys(prog.lenders).length;
               return(
-                <button key={name} onClick={()=>{setActiveProgram(name);setProduct(prog.product);}} style={{padding:"6px 14px",background:isActive?T.accent:T.card,color:isActive?T.bg:T.sub,border:`1px solid ${isActive?T.accent:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:isActive?700:500,letterSpacing:0.5,display:"flex",alignItems:"center",gap:6}}>
+                <button key={name} onClick={()=>{
+                  setActiveProgram(name);setProduct(prog.product);
+                  // Reset program-specific params to valid defaults
+                  if(prog.product==="dscr"){
+                    setParams(p=>({...p,occupancy:"Investment",incomeDoc:"DSCR",dscr:p.dscr||"1.00",ppp:p.ppp||"3 Year"}));
+                  } else {
+                    setParams(p=>({...p,occupancy:p.occupancy==="Investment"||p.occupancy==="Non-Owner"?"Primary":p.occupancy,incomeDoc:p.incomeDoc==="DSCR"?"Bank Statement":p.incomeDoc}));
+                  }
+                }} style={{padding:"6px 14px",background:isActive?T.accent:T.card,color:isActive?T.bg:T.sub,border:`1px solid ${isActive?T.accent:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:isActive?700:500,letterSpacing:0.5,display:"flex",alignItems:"center",gap:6}}>
                   <span style={{width:6,height:6,borderRadius:1,background:prog.product==="dscr"?T.hxTeal:prog.product==="consumer"?T.accent:T.purple,opacity:isActive?1:0.5}}/>
                   {name}
                   <span style={{fontSize:8,color:isActive?T.bg:T.dark,opacity:0.7}}>({lenderCount})</span>
