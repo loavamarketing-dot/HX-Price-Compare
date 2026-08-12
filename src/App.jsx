@@ -35,30 +35,99 @@ const TradingViewCalendar = memo(function TradingViewCalendar() {
 });
 
 const TradingViewNewsFeed = memo(function TradingViewNewsFeed() {
-  const container = useRef();
+  const [articles, setArticles] = useState([]);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    const script = document.createElement("script");
-    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-timeline.js";
-    script.type = "text/javascript";
-    script.async = true;
-    script.innerHTML = `
-      {
-        "displayMode": "regular",
-        "feedMode": "all_symbols",
-        "colorTheme": "dark",
-        "isTransparent": false,
-        "locale": "en",
-        "width": "100%",
-        "height": "100%"
-      }`;
-    container.current.appendChild(script);
+    async function fetchNews() {
+      try {
+        // Try CORS proxy approaches for RSS
+        const proxies = [
+          "https://api.allorigins.win/raw?url=" + encodeURIComponent("https://www.mortgagenewsdaily.com/rss/news"),
+          "https://api.rss2json.com/v1/api.json?rss_url=" + encodeURIComponent("https://www.mortgagenewsdaily.com/rss/news"),
+        ];
+        let items = [];
+
+        // Try rss2json first (returns clean JSON)
+        try {
+          const res = await fetch(proxies[1]);
+          const data = await res.json();
+          if (data.items) {
+            items = data.items.slice(0, 20).map(item => ({
+              title: item.title,
+              link: item.link,
+              source: item.author || "MND",
+              date: item.pubDate,
+            }));
+          }
+        } catch(e) {
+          // Fallback: raw XML parse
+          const res = await fetch(proxies[0]);
+          const text = await res.text();
+          const parser = new DOMParser();
+          const xml = parser.parseFromString(text, "text/xml");
+          const xmlItems = xml.querySelectorAll("item");
+          xmlItems.forEach((item, i) => {
+            if (i < 20) {
+              items.push({
+                title: item.querySelector("title")?.textContent || "",
+                link: item.querySelector("link")?.textContent || "",
+                source: item.querySelector("dc\\:creator, creator")?.textContent || "MND",
+                date: item.querySelector("pubDate")?.textContent || "",
+              });
+            }
+          });
+        }
+
+        setArticles(items);
+      } catch (e) {
+        console.error("MND feed error:", e);
+      }
+      setLoading(false);
+    }
+    fetchNews();
+    const interval = setInterval(fetchNews, 5 * 60 * 1000); // refresh every 5 min
+    return () => clearInterval(interval);
   }, []);
+
+  const formatTime = (dateStr) => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffH = Math.floor((now - d) / 3600000);
+    if (diffH < 1) return "Just now";
+    if (diffH < 24) return `${diffH}h ago`;
+    const diffD = Math.floor(diffH / 24);
+    if (diffD === 1) return "Yesterday";
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
   return (
-    <div className="tradingview-widget-container" ref={container} style={{height:"100%"}}>
-      <div className="tradingview-widget-container__widget" style={{height:"100%"}}></div>
-      <div className="tradingview-widget-copyright" style={{fontSize:10,padding:"4px 14px",color:"#666"}}>
-        <a href="https://www.tradingview.com/news/top-providers/tradingview/" rel="noopener nofollow" target="_blank" style={{color:"#4da6ff",textDecoration:"none"}}>Top stories</a>
-        <span> by TradingView</span>
+    <div style={{height:"100%",overflow:"auto",background:T.sf}}>
+      {loading ? (
+        <div style={{padding:20,textAlign:"center",color:T.muted,fontSize:11}}>Loading mortgage news...</div>
+      ) : articles.length === 0 ? (
+        <div style={{padding:20,textAlign:"center",color:T.muted,fontSize:11}}>Unable to load news feed</div>
+      ) : (
+        <div style={{display:"flex",flexDirection:"column"}}>
+          {articles.map((a, i) => (
+            <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" style={{
+              display:"block",padding:"10px 14px",borderBottom:`1px solid ${T.border}`,
+              textDecoration:"none",transition:"background .1s",cursor:"pointer",
+            }} onMouseEnter={e=>e.currentTarget.style.background=T.card} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <div style={{fontSize:12,color:T.text,lineHeight:1.4,fontWeight:500,marginBottom:3}}>{a.title}</div>
+              <div style={{fontSize:9,color:T.muted}}>
+                <span style={{color:T.accent,fontWeight:600}}>{a.source}</span>
+                <span style={{margin:"0 6px"}}>·</span>
+                <span>{formatTime(a.date)}</span>
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
+      <div style={{padding:"6px 14px",fontSize:9,color:T.dark,borderTop:`1px solid ${T.border}`}}>
+        <a href="https://www.mortgagenewsdaily.com" target="_blank" rel="noopener noreferrer" style={{color:T.hxTeal,textDecoration:"none"}}>Mortgage News Daily</a>
+        <span> · Updated every 5 min</span>
       </div>
     </div>
   );
@@ -76,8 +145,8 @@ function MarketWidgets() {
       </div>
       <div style={{border:`1px solid ${T.border}`,borderRadius:2,overflow:"hidden"}}>
         <div style={{padding:"10px 14px",background:T.card,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:T.muted}}>MARKET NEWS</span>
-          <span style={{fontSize:9,color:T.dark,letterSpacing:1}}>— TOP STORIES</span>
+          <span style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:T.muted}}>MORTGAGE NEWS</span>
+          <span style={{fontSize:9,color:T.dark,letterSpacing:1}}>— MORTGAGE NEWS DAILY</span>
         </div>
         <div style={{height:450}}><TradingViewNewsFeed /></div>
       </div>
