@@ -41,42 +41,40 @@ const TradingViewNewsFeed = memo(function TradingViewNewsFeed() {
   useEffect(() => {
     async function fetchNews() {
       try {
-        // Try CORS proxy approaches for RSS
-        const proxies = [
-          "https://api.allorigins.win/raw?url=" + encodeURIComponent("https://www.mortgagenewsdaily.com/rss/news"),
-          "https://api.rss2json.com/v1/api.json?rss_url=" + encodeURIComponent("https://www.mortgagenewsdaily.com/rss/news"),
-        ];
-        let items = [];
+        const res = await fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent("https://www.mortgagenewsdaily.com/"));
+        const html = await res.text();
+        const items = [];
 
-        // Try rss2json first (returns clean JSON)
-        try {
-          const res = await fetch(proxies[1]);
-          const data = await res.json();
-          if (data.items) {
-            items = data.items.slice(0, 20).map(item => ({
-              title: item.title,
-              link: item.link,
-              source: item.author || "MND",
-              date: item.pubDate,
-            }));
+        // Parse "Around the Web" section from page HTML
+        const atwMatch = html.match(/Around the Web[\s\S]*?<ul[^>]*>([\s\S]*?)<\/ul>/i);
+        if (atwMatch) {
+          const listHtml = atwMatch[1];
+          const liRegex = /<li[^>]*>[\s\S]*?<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>([\s\S]*?)<\/li>/gi;
+          let m;
+          while ((m = liRegex.exec(listHtml)) !== null && items.length < 40) {
+            const link = m[1];
+            const title = m[2].replace(/<[^>]*>/g, "").trim();
+            const rest = m[3].replace(/<[^>]*>/g, "").trim();
+            // rest is usually "Source - Time"
+            const parts = rest.split(" - ");
+            const source = parts[0]?.trim() || "";
+            const time = parts.slice(1).join(" - ").trim();
+            if (title && title.length > 10) items.push({ title, link, source, time });
           }
-        } catch(e) {
-          // Fallback: raw XML parse
-          const res = await fetch(proxies[0]);
-          const text = await res.text();
-          const parser = new DOMParser();
-          const xml = parser.parseFromString(text, "text/xml");
-          const xmlItems = xml.querySelectorAll("item");
-          xmlItems.forEach((item, i) => {
-            if (i < 20) {
-              items.push({
-                title: item.querySelector("title")?.textContent || "",
-                link: item.querySelector("link")?.textContent || "",
-                source: item.querySelector("dc\\:creator, creator")?.textContent || "MND",
-                date: item.querySelector("pubDate")?.textContent || "",
+        }
+
+        // Fallback: also try parsing headline links if ATW section not found
+        if (items.length === 0) {
+          // Try RSS fallback
+          try {
+            const rssRes = await fetch("https://api.rss2json.com/v1/api.json?rss_url=" + encodeURIComponent("https://www.mortgagenewsdaily.com/rss/news"));
+            const rssData = await rssRes.json();
+            if (rssData.items) {
+              rssData.items.slice(0, 25).forEach(item => {
+                items.push({ title: item.title, link: item.link, source: item.author || "MND", time: new Date(item.pubDate).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) });
               });
             }
-          });
+          } catch(e) {}
         }
 
         setArticles(items);
@@ -86,21 +84,9 @@ const TradingViewNewsFeed = memo(function TradingViewNewsFeed() {
       setLoading(false);
     }
     fetchNews();
-    const interval = setInterval(fetchNews, 5 * 60 * 1000); // refresh every 5 min
+    const interval = setInterval(fetchNews, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
-
-  const formatTime = (dateStr) => {
-    if (!dateStr) return "";
-    const d = new Date(dateStr);
-    const now = new Date();
-    const diffH = Math.floor((now - d) / 3600000);
-    if (diffH < 1) return "Just now";
-    if (diffH < 24) return `${diffH}h ago`;
-    const diffD = Math.floor(diffH / 24);
-    if (diffD === 1) return "Yesterday";
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  };
 
   return (
     <div style={{height:"100%",overflow:"auto",background:T.sf}}>
@@ -112,22 +98,21 @@ const TradingViewNewsFeed = memo(function TradingViewNewsFeed() {
         <div style={{display:"flex",flexDirection:"column"}}>
           {articles.map((a, i) => (
             <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" style={{
-              display:"block",padding:"10px 14px",borderBottom:`1px solid ${T.border}`,
+              display:"block",padding:"9px 14px",borderBottom:`1px solid ${T.border}`,
               textDecoration:"none",transition:"background .1s",cursor:"pointer",
             }} onMouseEnter={e=>e.currentTarget.style.background=T.card} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <div style={{fontSize:12,color:T.text,lineHeight:1.4,fontWeight:500,marginBottom:3}}>{a.title}</div>
+              <div style={{fontSize:11,color:T.text,lineHeight:1.4,fontWeight:500,marginBottom:2}}>{a.title}</div>
               <div style={{fontSize:9,color:T.muted}}>
                 <span style={{color:T.accent,fontWeight:600}}>{a.source}</span>
-                <span style={{margin:"0 6px"}}>·</span>
-                <span>{formatTime(a.date)}</span>
+                {a.time&&<><span style={{margin:"0 5px"}}>·</span><span>{a.time}</span></>}
               </div>
             </a>
           ))}
         </div>
       )}
       <div style={{padding:"6px 14px",fontSize:9,color:T.dark,borderTop:`1px solid ${T.border}`}}>
-        <a href="https://www.mortgagenewsdaily.com" target="_blank" rel="noopener noreferrer" style={{color:T.hxTeal,textDecoration:"none"}}>Mortgage News Daily</a>
-        <span> · Updated every 5 min</span>
+        <a href="https://www.mortgagenewsdaily.com/aroundtheweb" target="_blank" rel="noopener noreferrer" style={{color:T.hxTeal,textDecoration:"none"}}>Mortgage News Daily — Around the Web</a>
+        <span> · Auto-refreshes every 5 min</span>
       </div>
     </div>
   );
