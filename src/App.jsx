@@ -89,12 +89,13 @@ function MarketWidgets() {
    THEME
    ═══════════════════════════════════════════════════════════════ */
 const T = {
-  bg:"#000",sf:"#0a0a0a",card:"#111",border:"#1a1a1a",borderL:"#222",
-  accent:"#00d4aa",accentDim:"#00d4aa22",blue:"#4da6ff",purple:"#a78bfa",orange:"#ff8c42",
-  green:"#00e68a",red:"#ff4d6a",amber:"#ffd166",
-  text:"#fff",sub:"#b3b3b3",muted:"#666",dark:"#444",
+  bg:"#0c1220",sf:"#111827",card:"#162032",border:"#1e2a3e",borderL:"#2a3a52",
+  accent:"#f7941d",accentDim:"#f7941d22",blue:"#3b82f6",purple:"#8b5cf6",orange:"#f7941d",
+  green:"#10b981",red:"#ef4444",amber:"#f59e0b",
+  text:"#f8fafc",sub:"#cbd5e1",muted:"#64748b",dark:"#475569",
   mono:"'JetBrains Mono','SF Mono','Consolas',monospace",
   sans:"'Inter',-apple-system,sans-serif",
+  hxNavy:"#0c1220",hxOrange:"#f7941d",hxTeal:"#0ea5e9",
 };
 const clr=v=>v>0?T.green:v<0?T.red:T.muted;
 
@@ -935,8 +936,8 @@ export default function App(){
       {/* HEADER */}
       <div style={{borderBottom:`1px solid ${T.border}`,padding:"14px 28px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div style={{display:"flex",alignItems:"center",gap:14}}>
-          <div style={{display:"flex",gap:2}}>{[0,1,2].map(i=><div key={i} style={{width:4,height:20,background:T.accent,opacity:1-i*0.3,borderRadius:1}}/>)}</div>
-          <div><div style={{fontSize:15,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase"}}>Pricing Engine</div><div style={{fontSize:10,color:T.muted,letterSpacing:2,textTransform:"uppercase",marginTop:1}}>{Object.keys(programs).length?`${Object.keys(programs).length} PROGRAM${Object.keys(programs).length>1?"S":""} · ${names.length} LENDERS`:"AWAITING TEMPLATE"}</div></div>
+          <div style={{display:"flex",gap:2}}>{[0,1,2].map(i=><div key={i} style={{width:4,height:22,background:i===0?T.accent:i===1?T.hxTeal:"#1e3a5f",borderRadius:1}}/>)}</div>
+          <div><div style={{fontSize:15,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase"}}><span style={{color:T.accent}}>HomeXpress</span> <span style={{color:T.sub}}>Pricing Engine</span></div><div style={{fontSize:10,color:T.muted,letterSpacing:2,textTransform:"uppercase",marginTop:1}}>{Object.keys(programs).length?`${Object.keys(programs).length} PROGRAM${Object.keys(programs).length>1?"S":""} · ${names.length} LENDERS`:"AWAITING TEMPLATE"}</div></div>
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center"}}>
           {lenders&&<span style={{border:`1px solid ${T.accent}44`,color:T.accent,padding:"3px 12px",borderRadius:2,fontSize:10,fontWeight:600,letterSpacing:1.5}}>{config.label}</span>}
@@ -957,7 +958,7 @@ export default function App(){
               const lenderCount=Object.keys(prog.lenders).length;
               return(
                 <button key={name} onClick={()=>{setActiveProgram(name);setProduct(prog.product);}} style={{padding:"6px 14px",background:isActive?T.accent:T.card,color:isActive?T.bg:T.sub,border:`1px solid ${isActive?T.accent:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:isActive?700:500,letterSpacing:0.5,display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{width:6,height:6,borderRadius:1,background:prog.product==="dscr"?T.orange:prog.product==="consumer"?T.accent:T.purple,opacity:isActive?1:0.5}}/>
+                  <span style={{width:6,height:6,borderRadius:1,background:prog.product==="dscr"?T.hxTeal:prog.product==="consumer"?T.accent:T.purple,opacity:isActive?1:0.5}}/>
                   {name}
                   <span style={{fontSize:8,color:isActive?T.bg:T.dark,opacity:0.7}}>({lenderCount})</span>
                 </button>
@@ -1039,8 +1040,8 @@ export default function App(){
           <div onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave} style={{textAlign:"center",padding:"80px 20px",border:`2px dashed ${dragging?T.accent:T.border}`,borderRadius:2,marginTop:Object.keys(programs).length?0:40,background:dragging?T.accentDim:"transparent",transition:"all .2s",cursor:"pointer"}} onClick={()=>document.getElementById("file-input").click()}>
             <input id="file-input" type="file" accept=".xlsx,.xls" onChange={onUpload} style={{display:"none"}}/>
             <div style={{width:60,height:60,border:`2px solid ${dragging?T.accent:T.border}`,borderRadius:2,margin:"0 auto 20px",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}><span style={{fontSize:24,color:T.accent}}>{dragging?"↓":"↑"}</span></div>
-            <div style={{fontSize:14,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>{dragging?"DROP FILE HERE":"INITIALIZE SYSTEM"}</div>
-            <div style={{fontSize:12,color:T.muted,maxWidth:400,margin:"0 auto",lineHeight:1.8}}>{dragging?"Release to upload template":"Drag & drop a competitor template (.xlsx) here, or click to browse"}</div>
+            <div style={{fontSize:14,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>{dragging?"DROP FILE HERE":"HOMEXPRESS PRICING ENGINE"}</div>
+            <div style={{fontSize:12,color:T.muted,maxWidth:400,margin:"0 auto",lineHeight:1.8}}>{dragging?"Release to upload template":"Drag & drop a competitor template (.xlsx) or click to upload"}</div>
           </div>
           <MarketWidgets />
           </>
@@ -1068,10 +1069,10 @@ export default function App(){
                 <button key={k} onClick={()=>setView(k)} style={{padding:"8px 20px",background:view===k?T.accent:T.bg,color:view===k?T.bg:T.muted,border:`1px solid ${view===k?T.accent:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>{l}</button>
               ))}
               <button onClick={()=>{setShowBuydown(!showBuydown);setShowPar(false);}} style={{padding:"8px 20px",background:showBuydown?T.blue:T.bg,color:showBuydown?T.bg:T.muted,border:`1px solid ${showBuydown?T.blue:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>BUYDOWN</button>
-              <button onClick={()=>{setShowPar(!showPar);setShowBuydown(false);setShowQueue(false);}} style={{padding:"8px 20px",background:showPar?"#a78bfa":T.bg,color:showPar?T.bg:T.muted,border:`1px solid ${showPar?"#a78bfa":T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>PAR ANALYSIS</button>
-              <button onClick={()=>{setShowQueue(!showQueue);setShowBuydown(false);setShowPar(false);}} style={{padding:"8px 20px",background:showQueue?T.amber:T.bg,color:showQueue?T.bg:T.muted,border:`1px solid ${showQueue?T.amber:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>QUEUE</button>
+              <button onClick={()=>{setShowPar(!showPar);setShowBuydown(false);setShowQueue(false);}} style={{padding:"8px 20px",background:showPar?T.hxTeal:T.bg,color:showPar?T.bg:T.muted,border:`1px solid ${showPar?T.hxTeal:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>PAR ANALYSIS</button>
+              <button onClick={()=>{setShowQueue(!showQueue);setShowBuydown(false);setShowPar(false);}} style={{padding:"8px 20px",background:showQueue?T.accent:T.bg,color:showQueue?T.bg:T.muted,border:`1px solid ${showQueue?T.accent:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>QUEUE</button>
               <div style={{flex:1}}/>
-              {showPar&&parAnalysis&&<button onClick={()=>exportParPDF(parAnalysis,config,params,lenders,hxN)} style={{padding:"8px 16px",background:"#a78bfa22",color:"#a78bfa",border:"1px solid #a78bfa44",borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ PAR REPORT PDF</button>}
+              {showPar&&parAnalysis&&<button onClick={()=>exportParPDF(parAnalysis,config,params,lenders,hxN)} style={{padding:"8px 16px",background:T.hxTeal+"22",color:T.hxTeal,border:"1px solid #a78bfa44",borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ PAR REPORT PDF</button>}
               <button onClick={()=>exportPDF(results,matrix,buydown,config,params,lenders,view,hxN)} style={{padding:"8px 16px",background:"transparent",color:T.accent,border:`1px solid ${T.accent}44`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ PDF REPORT</button>
               <button onClick={()=>exportXLSX(results,params,best)} style={{padding:"8px 16px",background:"transparent",color:T.muted,border:`1px solid ${T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ XLSX</button>
             </div>
