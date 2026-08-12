@@ -877,6 +877,10 @@ export default function App(){
   const[showBuydown,setShowBuydown]=useState(false);
   const[showPar,setShowPar]=useState(false);
   const[showQueue,setShowQueue]=useState(false);
+  const[showWhatIf,setShowWhatIf]=useState(false);
+  const[wifLlpa,setWifLlpa]=useState("");
+  const[wifAdj,setWifAdj]=useState("0.250");
+  const[wifLtv,setWifLtv]=useState("all");
   const[queue,setQueue]=useState([]);
   const[showQuickEntry,setShowQuickEntry]=useState(false);
   const[quickText,setQuickText]=useState("");
@@ -1081,9 +1085,10 @@ export default function App(){
               ))}
               <button onClick={()=>{setShowBuydown(!showBuydown);setShowPar(false);}} style={{padding:"8px 20px",background:showBuydown?T.blue:T.bg,color:showBuydown?T.bg:T.muted,border:`1px solid ${showBuydown?T.blue:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>BUYDOWN</button>
               <button onClick={()=>{setShowPar(!showPar);setShowBuydown(false);setShowQueue(false);}} style={{padding:"8px 20px",background:showPar?T.hxTeal:T.bg,color:showPar?T.bg:T.muted,border:`1px solid ${showPar?T.hxTeal:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>PAR ANALYSIS</button>
-              <button onClick={()=>{setShowQueue(!showQueue);setShowBuydown(false);setShowPar(false);}} style={{padding:"8px 20px",background:showQueue?T.accent:T.bg,color:showQueue?T.bg:T.muted,border:`1px solid ${showQueue?T.accent:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>QUEUE</button>
+              <button onClick={()=>{setShowQueue(!showQueue);setShowBuydown(false);setShowPar(false);setShowWhatIf(false);}} style={{padding:"8px 20px",background:showQueue?T.accent:T.bg,color:showQueue?T.bg:T.muted,border:`1px solid ${showQueue?T.accent:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>QUEUE</button>
+              <button onClick={()=>{setShowWhatIf(!showWhatIf);setShowBuydown(false);setShowPar(false);setShowQueue(false);}} style={{padding:"8px 20px",background:showWhatIf?T.green:T.bg,color:showWhatIf?T.bg:T.muted,border:`1px solid ${showWhatIf?T.green:T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>WHAT-IF</button>
               <div style={{flex:1}}/>
-              {showPar&&parAnalysis&&<button onClick={()=>exportParPDF(parAnalysis,config,params,lenders,hxN)} style={{padding:"8px 16px",background:T.hxTeal+"22",color:T.hxTeal,border:"1px solid #a78bfa44",borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ PAR REPORT PDF</button>}
+              {showPar&&!showWhatIf&&parAnalysis&&<button onClick={()=>exportParPDF(parAnalysis,config,params,lenders,hxN)} style={{padding:"8px 16px",background:T.hxTeal+"22",color:T.hxTeal,border:"1px solid #a78bfa44",borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ PAR REPORT PDF</button>}
               <button onClick={()=>exportPDF(results,matrix,buydown,config,params,lenders,view,hxN)} style={{padding:"8px 16px",background:"transparent",color:T.accent,border:`1px solid ${T.accent}44`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ PDF REPORT</button>
               <button onClick={()=>exportXLSX(results,params,best)} style={{padding:"8px 16px",background:"transparent",color:T.muted,border:`1px solid ${T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ XLSX</button>
             </div>
@@ -1109,7 +1114,7 @@ export default function App(){
             )}
 
             {/* KPIs */}
-            {view!=="matrix"&&!showBuydown&&!showPar&&!showPar&&(
+            {view!=="matrix"&&!showBuydown&&!showPar&&!showWhatIf&&!showWhatIf&&(
               <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:8,marginBottom:14}}>
                 {[{l:"HX NET PRICE",v:hx?.ok?hx.net.toFixed(3):"N/A",c:T.accent},{l:"RANK",v:hx?.rank?`#${hx.rank}`:"N/A",c:hx?.rank<=3?T.green:hx?.rank<=5?T.amber:T.red},{l:"ADJUSTMENTS",v:hx?.ok?hx.adjustments.length:"—",c:T.muted},{l:"TOTAL LLPA",v:hx?.ok?(hx.totalAdj>=0?"+":"")+hx.totalAdj.toFixed(3):"—",c:clr(hx?.totalAdj)},{l:"BEST PRICE",v:best?.net?.toFixed(3)||"—",c:T.green},{l:"GAP TO #1",v:hx?.ok&&best?.ok?(hx.net>=best.net?"—":(hx.net-best.net).toFixed(3)):"N/A",c:hx?.net>=best?.net?T.green:T.red}].map((k,i)=>(
                   <div key={i} style={{background:T.card,borderRadius:2,padding:"12px 14px",border:`1px solid ${T.border}`,borderTop:`2px solid ${k.c}22`}}>
@@ -1121,7 +1126,7 @@ export default function App(){
             )}
 
             {/* BUYDOWN ANALYSIS */}
-            {showBuydown&&!showPar&&buydown&&(
+            {showBuydown&&!showPar&&!showWhatIf&&buydown&&(
               <div style={{border:`1px solid ${T.border}`,borderRadius:2,overflow:"auto",marginBottom:14}}>
                 <div style={{padding:"12px 16px",background:T.card,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div><span style={{fontSize:12,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase"}}>Rate Stack / Buydown Analysis</span><span style={{fontSize:10,color:T.muted,marginLeft:12}}>Net price at each rate with all scenario LLPAs applied</span></div>
@@ -1156,7 +1161,7 @@ export default function App(){
             )}
 
             {/* RANKING */}
-            {view==="ranking"&&!showBuydown&&!showPar&&(
+            {view==="ranking"&&!showBuydown&&!showPar&&!showWhatIf&&(
               <div style={{border:`1px solid ${T.border}`,borderRadius:2,overflow:"hidden"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                   <thead><tr style={{background:T.card}}>
@@ -1179,7 +1184,7 @@ export default function App(){
             )}
 
             {/* WATERFALL */}
-            {view==="decomp"&&!showBuydown&&!showPar&&(
+            {view==="decomp"&&!showBuydown&&!showPar&&!showWhatIf&&(
               <div style={{display:"grid",gridTemplateColumns:`repeat(${Math.min(names.length,4)},1fr)`,gap:10}}>
                 {names.map(name=>{const r=results.find(x=>x.lender===name);const isHx=name===hxN;return(
                   <div key={name} style={{background:T.card,borderRadius:2,border:`1px solid ${isHx?T.accent+"44":T.border}`,padding:16,borderTop:isHx?`2px solid ${T.accent}`:`2px solid ${T.border}`}}>
@@ -1198,7 +1203,7 @@ export default function App(){
             )}
 
             {/* MATRIX */}
-            {view==="matrix"&&!showBuydown&&!showPar&&(
+            {view==="matrix"&&!showBuydown&&!showPar&&!showWhatIf&&(
               <div style={{border:`1px solid ${T.border}`,borderRadius:2,overflow:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                   <thead><tr style={{background:T.card}}><th style={{padding:"10px 12px",color:T.muted,fontSize:9,letterSpacing:1.5,borderBottom:`1px solid ${T.border}`,fontWeight:600,textAlign:"left"}}>LTV \ FICO</th>{config.ficos.map(f=><th key={f} style={{padding:"10px 12px",textAlign:"center",color:T.muted,fontSize:9,borderBottom:`1px solid ${T.border}`,fontWeight:600,letterSpacing:1}}>{f}</th>)}</tr></thead>
@@ -1208,10 +1213,125 @@ export default function App(){
               </div>
             )}
 
+            {/* WHAT-IF SIMULATOR */}
+            {showWhatIf&&lenders&&(()=>{
+              // Get all HX LLPA names
+              const hxLender=lenders[hxN];
+              const llpaNames=hxLender?Object.keys(hxLender.llpas):[];
+              const adjVal=parseFloat(wifAdj)||0;
+
+              // Build modified HX lender
+              let modLenders=lenders;
+              if(hxLender&&wifLlpa&&adjVal!==0){
+                const modLlpas={...hxLender.llpas};
+                if(modLlpas[wifLlpa]){
+                  const modRow={...modLlpas[wifLlpa]};
+                  if(wifLtv==="all"){Object.keys(modRow).forEach(k=>{if(modRow[k]!==null&&typeof modRow[k]==="number")modRow[k]=+(modRow[k]+adjVal).toFixed(3);});}
+                  else{if(modRow[wifLtv]!==null&&typeof modRow[wifLtv]==="number")modRow[wifLtv]=+(modRow[wifLtv]+adjVal).toFixed(3);}
+                  modLlpas[wifLlpa]=modRow;
+                }
+                modLenders={...lenders,[hxN]:{...hxLender,llpas:modLlpas}};
+              }
+
+              // Compute before/after
+              const before=results;
+              const afterAll=Object.values(modLenders).map(l=>calcNet(l,params));
+              const afterOk=afterAll.filter(r=>r.ok).sort((a,b)=>b.net-a.net);
+              afterOk.forEach((r,i)=>r.rank=i+1);
+              const after=[...afterOk,...afterAll.filter(r=>!r.ok)];
+
+              const bHx=before.find(r=>r.lender===hxN);
+              const aHx=after.find(r=>r.lender===hxN);
+              const bBest=before[0];
+              const aBest=after[0];
+              const netDelta=bHx?.ok&&aHx?.ok?+(aHx.net-bHx.net).toFixed(3):0;
+              const rankDelta=bHx?.rank&&aHx?.rank?bHx.rank-aHx.rank:0;
+              const bands=hxLender&&Object.values(hxLender.llpas)[0]?Object.keys(Object.values(hxLender.llpas)[0]):[];
+
+              return(
+                <div style={{marginBottom:14}}>
+                  <div style={{padding:"14px 16px",background:T.card,border:`1px solid ${T.border}`,borderRadius:2,marginBottom:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                      <span style={{fontSize:12,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase"}}>WHAT-IF SIMULATOR</span>
+                      <button onClick={()=>{setWifLlpa("");setWifAdj("0.250");setWifLtv("all");}} style={{padding:"4px 12px",background:"transparent",color:T.muted,border:`1px solid ${T.border}`,borderRadius:2,cursor:"pointer",fontSize:9,fontWeight:700,letterSpacing:1}}>RESET</button>
+                    </div>
+
+                    {/* Controls */}
+                    <div style={{display:"flex",gap:10,alignItems:"flex-end",flexWrap:"wrap"}}>
+                      <div style={{flex:1,minWidth:200}}><div style={{fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:1.5,marginBottom:3,fontWeight:600}}>ADJUST LLPA</div>
+                        <select value={wifLlpa} onChange={e=>setWifLlpa(e.target.value)} style={{width:"100%",padding:"7px 8px",background:T.sf,color:T.text,border:`1px solid ${T.border}`,borderRadius:2,fontSize:11,fontFamily:T.sans,outline:"none"}}>
+                          <option value="">— Select LLPA —</option>
+                          {llpaNames.map(n=><option key={n} value={n}>{n}</option>)}
+                        </select>
+                      </div>
+                      <div style={{width:90}}><div style={{fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:1.5,marginBottom:3,fontWeight:600}}>CHANGE (PTS)</div>
+                        <input value={wifAdj} onChange={e=>setWifAdj(e.target.value)} style={{width:"100%",padding:"7px 8px",background:T.sf,color:T.text,border:`1px solid ${T.border}`,borderRadius:2,fontSize:12,fontFamily:T.mono,outline:"none",boxSizing:"border-box"}}/>
+                      </div>
+                      <div style={{width:90}}><div style={{fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:1.5,marginBottom:3,fontWeight:600}}>LTV BAND</div>
+                        <select value={wifLtv} onChange={e=>setWifLtv(e.target.value)} style={{width:"100%",padding:"7px 8px",background:T.sf,color:T.text,border:`1px solid ${T.border}`,borderRadius:2,fontSize:11,fontFamily:T.sans,outline:"none"}}>
+                          <option value="all">All Bands</option>
+                          {bands.map(b=><option key={b} value={b}>{b}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {wifLlpa&&adjVal!==0?(
+                    <>
+                      {/* Before / After Cards */}
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                        <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:2,padding:16,borderTop:`2px solid ${T.muted}`}}>
+                          <div style={{fontSize:10,color:T.muted,letterSpacing:2,fontWeight:700,marginBottom:12}}>CURRENT</div>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{color:T.sub,fontSize:11}}>HX Net Price</span><span style={{fontFamily:T.mono,fontSize:16,fontWeight:700}}>{bHx?.ok?bHx.net.toFixed(3):"N/A"}</span></div>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{color:T.sub,fontSize:11}}>Rank</span><span style={{fontFamily:T.mono,fontSize:16,fontWeight:700,color:bHx?.rank<=3?T.green:T.amber}}>#{bHx?.rank||"—"}</span></div>
+                          <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:T.sub,fontSize:11}}>Gap to #1</span><span style={{fontFamily:T.mono,fontSize:13,fontWeight:600,color:T.red}}>{bHx?.ok&&bBest?.ok?bHx.net>=bBest.net?"—":(bHx.net-bBest.net).toFixed(3):"—"}</span></div>
+                        </div>
+                        <div style={{background:T.card,border:`1px solid ${T.green}33`,borderRadius:2,padding:16,borderTop:`2px solid ${T.green}`}}>
+                          <div style={{fontSize:10,color:T.green,letterSpacing:2,fontWeight:700,marginBottom:12}}>PROPOSED</div>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{color:T.sub,fontSize:11}}>HX Net Price</span><span style={{fontFamily:T.mono,fontSize:16,fontWeight:700}}>{aHx?.ok?aHx.net.toFixed(3):"N/A"}<span style={{fontSize:11,color:netDelta>0?T.green:netDelta<0?T.red:T.muted,marginLeft:6}}>{netDelta>0?"+":""}{netDelta.toFixed(3)}</span></span></div>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{color:T.sub,fontSize:11}}>Rank</span><span style={{fontFamily:T.mono,fontSize:16,fontWeight:700,color:aHx?.rank<=3?T.green:T.amber}}>#{aHx?.rank||"—"}{rankDelta!==0&&<span style={{fontSize:11,color:rankDelta>0?T.green:T.red,marginLeft:6}}>{rankDelta>0?"↑":"↓"}{Math.abs(rankDelta)}</span>}</span></div>
+                          <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:T.sub,fontSize:11}}>Gap to #1</span><span style={{fontFamily:T.mono,fontSize:13,fontWeight:600,color:aHx?.net>=aBest?.net?T.green:T.red}}>{aHx?.ok&&aBest?.ok?aHx.net>=aBest.net?"— (#1)":(aHx.net-aBest.net).toFixed(3):"—"}</span></div>
+                        </div>
+                      </div>
+
+                      {/* Ranking Comparison Table */}
+                      <div style={{border:`1px solid ${T.border}`,borderRadius:2,overflow:"hidden"}}>
+                        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                          <thead><tr style={{background:T.card}}>
+                            {["RANK","LENDER","CURRENT NET","PROPOSED NET","Δ PRICE","Δ RANK"].map(h=>(
+                              <th key={h} style={{padding:"8px 10px",textAlign:h==="LENDER"?"left":"center",color:T.muted,fontSize:9,letterSpacing:1.5,borderBottom:`1px solid ${T.border}`,fontWeight:600}}>{h}</th>
+                            ))}
+                          </tr></thead>
+                          <tbody>{after.filter(r=>r.ok).map((ar,i)=>{
+                            const br=before.find(x=>x.lender===ar.lender);
+                            const isHx=ar.lender===hxN;
+                            const priceDelta=br?.ok?+(ar.net-br.net).toFixed(3):0;
+                            const rDelta=br?.rank&&ar.rank?br.rank-ar.rank:0;
+                            return(
+                              <tr key={i} style={{background:isHx?`${T.green}08`:i%2?T.card+"80":"transparent",borderBottom:`1px solid ${T.border}`}}>
+                                <td style={{padding:"7px 10px",textAlign:"center",fontWeight:700,fontSize:14,fontFamily:T.mono,color:ar.rank===1?T.green:ar.rank<=3?T.amber:T.muted}}>{ar.rank}</td>
+                                <td style={{padding:"7px 10px",fontWeight:isHx?700:400,color:isHx?T.accent:T.text,fontSize:11,borderLeft:isHx?`2px solid ${T.accent}`:"2px solid transparent"}}>{isHx?"◆ ":""}{ar.lender}</td>
+                                <td style={{padding:"7px 10px",textAlign:"center",fontFamily:T.mono,fontSize:12,color:T.sub}}>{br?.ok?br.net.toFixed(3):"—"}</td>
+                                <td style={{padding:"7px 10px",textAlign:"center",fontFamily:T.mono,fontSize:12,fontWeight:isHx?700:400}}>{ar.net.toFixed(3)}</td>
+                                <td style={{padding:"7px 10px",textAlign:"center",fontFamily:T.mono,fontSize:11,fontWeight:600,color:priceDelta>0?T.green:priceDelta<0?T.red:T.muted}}>{priceDelta!==0?(priceDelta>0?"+":"")+priceDelta.toFixed(3):"—"}</td>
+                                <td style={{padding:"7px 10px",textAlign:"center",fontWeight:700,color:rDelta>0?T.green:rDelta<0?T.red:T.muted,fontSize:12}}>{rDelta>0?"↑"+rDelta:rDelta<0?"↓"+Math.abs(rDelta):"—"}</td>
+                              </tr>
+                            );
+                          })}</tbody>
+                        </table>
+                      </div>
+                    </>
+                  ):(
+                    <div style={{textAlign:"center",padding:30,color:T.muted,fontSize:11}}>Select an LLPA and enter an adjustment to see the impact.</div>
+                  )}
+                </div>
+              );
+            })()}
+
             <div style={{marginTop:16,fontSize:9,color:T.dark,textAlign:"center",letterSpacing:2,textTransform:"uppercase"}}>{names.join(" · ")}</div>
 
             {/* PAR RATE ANALYSIS */}
-            {showPar&&parAnalysis&&(
+            {showPar&&!showWhatIf&&parAnalysis&&(
               <div style={{marginBottom:14}}>
                 <div style={{padding:"12px 16px",background:T.card,border:`1px solid ${T.border}`,borderRadius:2,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div>
