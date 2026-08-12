@@ -348,27 +348,111 @@ function calcNet(lender,p){
   if(!rk||Math.abs(rk-p.rate)>0.2)return{...r,ok:false,reason:"Rate N/A"};
   r.base=lender.rates[rk]?.[p.lock];if(!r.base)return{...r,ok:false,reason:`No ${p.lock}-day`};
   const bands=Object.values(lender.llpas)[0]?Object.keys(Object.values(lender.llpas)[0]):[];
-  const ltvB=matchBand(p.ltv,bands,"ltv");const ficoKeys=Object.keys(lender.llpas).filter(k=>/fico/i.test(k));
+  const ltvB=matchBand(p.ltv,bands,"ltv");
+  const ficoKeys=Object.keys(lender.llpas).filter(k=>/fico/i.test(k));
   const ficoB=matchBand(p.fico,ficoKeys,"fico");
+
+  // 1. FICO / LTV (primary grid)
   if(ficoB&&lender.llpas[ficoB]){const v=lender.llpas[ficoB][ltvB];if(v==null)return{...r,ok:false,reason:`${ficoB}/${ltvB} N/A`};adjs.push({cat:"FICO/LTV",name:ficoB,value:v});}
+
+  // 2. Purpose
   if(p.purpose!=="Purchase"){const{name,value}=findLlpa(lender.llpas,[p.purpose.includes("Cash")?"Cash":"Rate/Term"],ltvB);if(value)adjs.push({cat:"Purpose",name,value});}
-  if(p.incomeDoc&&p.incomeDoc!=="Bank Statement"){const{name,value}=findLlpa(lender.llpas,[p.incomeDoc,"Full Doc","Asset"],ltvB);if(value)adjs.push({cat:"Income",name,value});}
-  if(p.propertyType==="Condo"){const{name,value}=findLlpa(lender.llpas,["Condo","High-Rise"],ltvB);if(value)adjs.push({cat:"Property",name,value});}
-  if(parseInt(p.units)>=2){const{name,value}=findLlpa(lender.llpas,["2-4 Units","2 Units"],ltvB);if(value)adjs.push({cat:"Units",name,value});}
-  if(p.occupancy==="Second Home"||p.occupancy==="2nd Home"){const{name,value}=findLlpa(lender.llpas,["2nd Home","Second"],ltvB);if(value)adjs.push({cat:"Occupancy",name,value});}
-  if(p.occupancy==="Investment"||p.occupancy==="Non-Owner"){const{name,value}=findLlpa(lender.llpas,["Non-Owner","NOO"],ltvB);if(value)adjs.push({cat:"Occupancy",name,value});}
-  if(p.interestOnly==="Yes"){const dv=parseFloat(p.dscr)||1;const{name,value}=findLlpa(lender.llpas,dv>=1?["I/O & DSCR Ratio >=","I/O & DSCR >=","Interest Only"]:["I/O & DSCR Ratio <","I/O & DSCR <","Interest Only"],ltvB);if(value)adjs.push({cat:"I/O",name,value});}
+
+  // 3. Income Doc
+  if(p.incomeDoc&&p.incomeDoc!=="Bank Statement"&&p.incomeDoc!=="DSCR"){const{name,value}=findLlpa(lender.llpas,[p.incomeDoc,"Full Doc","Asset","Alt Doc"],ltvB);if(value)adjs.push({cat:"Income",name,value});}
+
+  // 4. Interest Only (with DSCR-aware matching)
+  if(p.interestOnly==="Yes"){
+    const dv=parseFloat(p.dscr)||1;
+    let ioTerms;
+    if(p.incomeDoc==="Full Doc"||p.incomeDoc==="Alt Doc") ioTerms=["I/O Full","I/O Alt","Interest Only"];
+    else if(dv>=1) ioTerms=["I/O & DSCR Ratio >=","I/O & DSCR >=","Interest Only"];
+    else ioTerms=["I/O & DSCR Ratio <","I/O & DSCR <","Interest Only"];
+    const{name,value}=findLlpa(lender.llpas,ioTerms,ltvB);if(value)adjs.push({cat:"I/O",name,value});
+  }
+
+  // 5. ARM
+  if(p.arm==="Yes"){const{name,value}=findLlpa(lender.llpas,["ARM"],ltvB);if(value)adjs.push({cat:"ARM",name,value});}
+
+  // 6. Self-Employed
   if(p.selfEmployed==="Yes"){const{name,value}=findLlpa(lender.llpas,["Self-Employed","Self Emp"],ltvB);if(value)adjs.push({cat:"Self-Emp",name,value});}
+
+  // 7. Property Type — High-Rise Condo
+  if(p.propertyType==="High-Rise Condo"){const{name,value}=findLlpa(lender.llpas,["High-Rise","High Rise","Condo"],ltvB);if(value)adjs.push({cat:"Property",name,value});}
+  // 8. Property Type — Non-Warrantable Condo
+  else if(p.propertyType==="Non-Warr Condo"){const{name,value}=findLlpa(lender.llpas,["Non-Warr","Non Warr","Condo"],ltvB);if(value)adjs.push({cat:"Property",name,value});}
+  // 9. Property Type — Standard Condo
+  else if(p.propertyType==="Condo"){const{name,value}=findLlpa(lender.llpas,["Condo"],ltvB);if(value&&!/high.rise|non.warr/i.test(name))adjs.push({cat:"Property",name,value});}
+  // 10. Property Type — Condotel
+  if(p.propertyType==="Condotel"){const{name,value}=findLlpa(lender.llpas,["Condotel"],ltvB);if(value)adjs.push({cat:"Condotel",name,value});}
+
+  // 11. Units
+  if(parseInt(p.units)>=2){const{name,value}=findLlpa(lender.llpas,["2-4 Units","2 Units"],ltvB);if(value)adjs.push({cat:"Units",name,value});}
+
+  // 12. Occupancy — 2nd Home
+  if(p.occupancy==="Second Home"||p.occupancy==="2nd Home"){const{name,value}=findLlpa(lender.llpas,["2nd Home","Second"],ltvB);if(value)adjs.push({cat:"Occupancy",name,value});}
+  // 13. Occupancy — Investment
+  if(p.occupancy==="Investment"||p.occupancy==="Non-Owner"){const{name,value}=findLlpa(lender.llpas,["Non-Owner","NOO","Investment"],ltvB);if(value)adjs.push({cat:"Occupancy",name,value});}
+
+  // 14. DSCR Ratio
   if(p.dscr){const dv=parseFloat(p.dscr);let t=[];if(dv>=1.25)t=["DSCR 1.25","DSCR 1.2"];else if(dv>=1.0)t=["DSCR 1.00","DSCR 1.0"];else if(dv>=0.75)t=["DSCR 0.75","DSCR 0.7"];else t=["No DSCR","DSCR (<"];const{name,value}=findLlpa(lender.llpas,t,ltvB);if(value)adjs.push({cat:"DSCR",name,value});}
-  if(p.ppp&&p.ppp!=="None"){const{name,value}=findLlpa(lender.llpas,[p.ppp],ltvB);if(value)adjs.push({cat:"PPP",name,value});}
-  if(p.loanAmount){const a=parseInt(p.loanAmount);let t=[];if(a>=500000)t=["$500k","≥ $500"];else if(a>=300000)t=["$300k","≥ $300"];else if(a>=150000)t=["$150k","≥ $150"];else t=["<$150","< $150"];const{name,value}=findLlpa(lender.llpas,t,ltvB);if(value)adjs.push({cat:"Loan Amt",name,value});}
+
+  // 15. Prepayment Penalty
+  if(p.ppp&&p.ppp!=="None"&&p.ppp!=="No Prepay"){const{name,value}=findLlpa(lender.llpas,[p.ppp],ltvB);if(value)adjs.push({cat:"PPP",name,value});}
+  if(p.ppp==="No Prepay"||p.ppp==="None"){const{name,value}=findLlpa(lender.llpas,["No Prepay","No PPP","None"],ltvB);if(value)adjs.push({cat:"PPP",name,value});}
+
+  // 16. Loan Amount tiers
+  if(p.loanAmount){
+    const a=parseInt(p.loanAmount);let t=[];
+    if(a>3500000)t=["$3.5mm","> $3.5","Loan Amt > $3.5"];
+    else if(a>3000000)t=["$3.0mm","> $3.0","$3.0mm","Loan Amt > $3.0"];
+    else if(a>2000000)t=["> $2.0","Loan Amt > $2.0","$2.0mm"];
+    else if(a>1500000)t=["> $1.5","$1.5mm","Loan Amt > $1.5"];
+    else if(a>=500000)t=["$500k","≥ $500","Loan Amt >= $500","Loan Amt >="];
+    else if(a>=300000)t=["$300k","≥ $300","Loan Amt >= $300"];
+    else if(a>=200000)t=["$200k","≥ $200"];
+    else if(a>=150000)t=["$150k","≥ $150"];
+    else t=["<$150","< $150","Loan Amt < $150"];
+    const{name,value}=findLlpa(lender.llpas,t,ltvB);if(value)adjs.push({cat:"Loan Amt",name,value});
+  }
+
+  // 17. Impound Waiver
   if(p.impoundWaiver==="Yes"){const{name,value}=findLlpa(lender.llpas,["Impound","Waive"],ltvB);if(value)adjs.push({cat:"Impound",name,value});}
+
+  // 18. Rural
   if(p.rural==="Yes"){const{name,value}=findLlpa(lender.llpas,["Rural"],ltvB);if(value)adjs.push({cat:"Rural",name,value});}
+
+  // 19. Short Term Rental
   if(p.str==="Yes"){const{name,value}=findLlpa(lender.llpas,["Short Term","STR"],ltvB);if(value)adjs.push({cat:"STR",name,value});}
+
+  // 20. Foreign National
   if(p.foreignNational==="Yes"){const{name,value}=findLlpa(lender.llpas,["Foreign"],ltvB);if(value)adjs.push({cat:"Foreign",name,value});}
-  const dti=findLlpa(lender.llpas,["DTI <= 43%","DTI"],ltvB);if(dti.value)adjs.push({cat:"DTI",name:dti.name,value:dti.value});
-  // LPC (Lender Paid Comp) — applied as a direct price adjustment
+
+  // 21. NPRA (Non-Permanent Resident Alien)
+  if(p.npra==="Yes"){const{name,value}=findLlpa(lender.llpas,["NPRA","Non-Perm","Non Perm","Resident Alien"],ltvB);if(value)adjs.push({cat:"NPRA",name,value});}
+
+  // 22. Housing 1x30
+  if(p.housing1x30==="Yes"){const{name,value}=findLlpa(lender.llpas,["Housing 1x30","Housing","1x30"],ltvB);if(value)adjs.push({cat:"Housing",name,value});}
+
+  // 23. TX Cash-Out
+  if(p.txCashOut==="Yes"||( p.state==="TX"&&p.purpose==="Cash-Out")){const{name,value}=findLlpa(lender.llpas,["Texas","TX Cash","Texas Cash"],ltvB);if(value)adjs.push({cat:"TX Cash-Out",name,value});}
+
+  // 24. DTI adjustment
+  if(p.dti){
+    const dtiVal=parseFloat(p.dti);
+    if(!isNaN(dtiVal)&&dtiVal<=43){const{name,value}=findLlpa(lender.llpas,["DTI <= 43","DTI <=43","DTI"],ltvB);if(value)adjs.push({cat:"DTI",name,value});}
+    if(!isNaN(dtiVal)&&dtiVal>45){const{name,value}=findLlpa(lender.llpas,["DTI >45","DTI > 45","<700 FICO","FICO & DTI"],ltvB);if(value)adjs.push({cat:"DTI Penalty",name,value});}
+  } else {
+    // Default DTI check even if not entered
+    const dti=findLlpa(lender.llpas,["DTI <= 43%","DTI"],ltvB);if(dti.value)adjs.push({cat:"DTI",name:dti.name,value:dti.value});
+  }
+
+  // 25. 60-Day Lock extension
+  if(p.lock==="60"){const{name,value}=findLlpa(lender.llpas,["60 Day","60 Lock","Lock Extension"],ltvB);if(value)adjs.push({cat:"Lock Ext",name,value});}
+
+  // 26. LPC (Lender Paid Comp) — direct price deduction
   if(p.lpc){const lpcVal=parseFloat(p.lpc);if(!isNaN(lpcVal)&&lpcVal!==0)adjs.push({cat:"LPC",name:"Lender Paid Comp",value:-Math.abs(lpcVal)});}
+
   r.totalAdj=+(adjs.reduce((s,a)=>s+a.value,0)).toFixed(3);r.net=+(r.base+r.totalAdj).toFixed(3);return r;
 }
 
@@ -805,6 +889,7 @@ export default function App(){
     selfEmployed:urlP.selfEmployed||"No",interestOnly:urlP.interestOnly||"No",
     dscr:urlP.dscr||"1.00",ppp:urlP.ppp||"3 Year",
     lpc:"",impoundWaiver:"No",housing1x30:"No",rural:"No",foreignNational:"No",str:"No",
+    npra:"No",nonWarrCondo:"No",txCashOut:"No",arm:"No",dti:"",state:"CA",
   });
 
   const config=CONFIGS[activeProgram&&programs[activeProgram]?programs[activeProgram].product:product]||CONFIGS.consumer;
@@ -964,10 +1049,11 @@ export default function App(){
             {/* PARAMETERS */}
             <div style={{border:`1px solid ${T.border}`,borderRadius:2,marginBottom:14,overflow:"hidden"}}>
               {[
-                {label:"LOAN",color:T.accent,fields:<><Sel l="Rate" v={params.rate} fn={v=>set("rate",+v)} opts={rates.map(r=>({v:r,l:r.toFixed(3)+"%"}))}/><Sel l="FICO" v={params.fico} fn={v=>set("fico",+v)} opts={config.ficos}/><Sel l="LTV" v={params.ltv} fn={v=>set("ltv",+v)} opts={config.ltvs.map(l=>({v:l,l:l+"%"}))}/><Inp l="Loan Amount" v={params.loanAmount} fn={v=>set("loanAmount",v)} ph="750000" w={115}/><Sel l="Lock" v={params.lock} fn={v=>set("lock",v)} opts={[{v:"15",l:"15 DAY"},{v:"30",l:"30 DAY"},{v:"45",l:"45 DAY"}]} w={80}/><Sel l="Purpose" v={params.purpose} fn={v=>set("purpose",v)} opts={["Purchase","Rate/Term Refi","Cash-Out"]}/></>},
-                {label:"PROPERTY",color:T.green,fields:<><Sel l="Type" v={params.propertyType} fn={v=>set("propertyType",v)} opts={product==="dscr"?["Single Family","Condo","High-Rise Condo","PUD","2-4 Units","Condotel"]:["Single Family","Condo","High-Rise Condo","PUD","2-4 Units"]}/><Sel l="Occupancy" v={params.occupancy} fn={v=>set("occupancy",v)} opts={product==="dscr"?["Investment","Non-Owner"]:["Primary","Second Home","Investment"]}/><Sel l="Units" v={params.units} fn={v=>set("units",v)} opts={["1","2","3-4"]} w={60}/><Tog l="Rural" v={params.rural} fn={v=>set("rural",v)}/>{product==="dscr"&&<Tog l="STR" v={params.str} fn={v=>set("str",v)}/>}<Tog l="1x30" v={params.housing1x30} fn={v=>set("housing1x30",v)}/></>},
-                {label:"BORROWER",color:T.orange,fields:<><Inp l="LPC" v={params.lpc} fn={v=>set("lpc",v)} ph="0.000" w={80}/><Sel l="Income Doc" v={params.incomeDoc} fn={v=>set("incomeDoc",v)} opts={product==="dscr"?["DSCR","Full Doc","Alt Doc","Asset Xpress","Bank Statement"]:["Bank Statement","Full Doc","Asset Xpress"]}/><Tog l="Self Emp" v={params.selfEmployed} fn={v=>set("selfEmployed",v)}/><Tog l="I/O" v={params.interestOnly} fn={v=>set("interestOnly",v)}/><Tog l="Impound" v={params.impoundWaiver} fn={v=>set("impoundWaiver",v)}/>{product==="dscr"&&<Tog l="Foreign" v={params.foreignNational} fn={v=>set("foreignNational",v)}/>}</>},
+                {label:"LOAN",color:T.accent,fields:<><Sel l="Rate" v={params.rate} fn={v=>set("rate",+v)} opts={rates.map(r=>({v:r,l:r.toFixed(3)+"%"}))}/><Sel l="FICO" v={params.fico} fn={v=>set("fico",+v)} opts={config.ficos}/><Sel l="LTV" v={params.ltv} fn={v=>set("ltv",+v)} opts={config.ltvs.map(l=>({v:l,l:l+"%"}))}/><Inp l="Loan Amt" v={params.loanAmount} fn={v=>set("loanAmount",v)} ph="750000" w={110}/><Sel l="Lock" v={params.lock} fn={v=>set("lock",v)} opts={[{v:"15",l:"15 DAY"},{v:"30",l:"30 DAY"},{v:"45",l:"45 DAY"},{v:"60",l:"60 DAY"}]} w={75}/><Sel l="Purpose" v={params.purpose} fn={v=>set("purpose",v)} opts={["Purchase","Rate/Term Refi","Cash-Out"]}/><Inp l="LPC" v={params.lpc} fn={v=>set("lpc",v)} ph="0.000" w={70}/></>},
+                {label:"PROPERTY",color:T.green,fields:<><Sel l="Type" v={params.propertyType} fn={v=>set("propertyType",v)} opts={product==="dscr"?["Single Family","Condo","High-Rise Condo","Non-Warr Condo","PUD","2-4 Units","Condotel"]:["Single Family","Condo","High-Rise Condo","Non-Warr Condo","PUD","2-4 Units"]}/><Sel l="Occupancy" v={params.occupancy} fn={v=>set("occupancy",v)} opts={product==="dscr"?["Investment","Non-Owner"]:["Primary","Second Home","Investment"]}/><Sel l="Units" v={params.units} fn={v=>set("units",v)} opts={["1","2","3-4"]} w={55}/><Tog l="Rural" v={params.rural} fn={v=>set("rural",v)}/>{product==="dscr"&&<Tog l="STR" v={params.str} fn={v=>set("str",v)}/>}<Tog l="1x30 Hsg" v={params.housing1x30} fn={v=>set("housing1x30",v)}/></>},
+                {label:"BORROWER",color:T.orange,fields:<><Sel l="Income Doc" v={params.incomeDoc} fn={v=>set("incomeDoc",v)} opts={product==="dscr"?["DSCR","Full Doc","Alt Doc","Asset Xpress"]:["Bank Statement","Full Doc","Alt Doc","Asset Xpress"]}/><Tog l="Self Emp" v={params.selfEmployed} fn={v=>set("selfEmployed",v)}/><Tog l="I/O" v={params.interestOnly} fn={v=>set("interestOnly",v)}/><Tog l="Impound Wvr" v={params.impoundWaiver} fn={v=>set("impoundWaiver",v)}/><Tog l="ARM" v={params.arm} fn={v=>set("arm",v)}/><Tog l="NPRA" v={params.npra} fn={v=>set("npra",v)}/>{product==="dscr"&&<Tog l="Foreign Natl" v={params.foreignNational} fn={v=>set("foreignNational",v)}/>}<Inp l="DTI" v={params.dti} fn={v=>set("dti",v)} ph="43" w={55}/></>},
                 ...(product==="dscr"?[{label:"DSCR",color:T.purple,fields:<><Sel l="DSCR Ratio" v={params.dscr} fn={v=>set("dscr",v)} opts={["1.25","1.00","0.85","0.75","No DSCR"]}/><Sel l="Prepay Penalty" v={params.ppp} fn={v=>set("ppp",v)} opts={["5 Year","4 Year","3 Year","2 Year","1 Year","No Prepay","None"]}/></>}]:[]),
+                {label:"OTHER",color:T.blue,fields:<>{params.purpose==="Cash-Out"&&params.state==="TX"&&<Tog l="TX Cash-Out" v={params.txCashOut} fn={v=>set("txCashOut",v)}/>}{params.purpose!=="Cash-Out"&&params.state==="TX"&&<span style={{fontSize:9,color:T.dark,padding:"6px 0"}}>TX C/O: select Cash-Out purpose</span>}<Sel l="State" v={params.state} fn={v=>set("state",v)} opts={["AK","AL","AR","AZ","CA","CO","CT","DC","DE","FL","GA","HI","IA","ID","IL","IN","KS","KY","LA","MA","ME","MD","MI","MN","MO","MS","MT","NC","NE","NH","NJ","NM","NV","OH","OK","OR","PA","RI","SC","TN","TX","UT","VA","WA","WI","WV","WY"]} w={65}/></>},
               ].map(({label,color,fields},i)=>(
                 <div key={i} style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end"}}>
                   <div style={{width:70,paddingBottom:5}}><span style={{fontSize:9,fontWeight:700,letterSpacing:2,color,borderLeft:`2px solid ${color}`,paddingLeft:8}}>{label}</span></div>
