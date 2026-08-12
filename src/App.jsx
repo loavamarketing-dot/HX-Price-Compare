@@ -40,41 +40,16 @@ const TradingViewNewsFeed = memo(function TradingViewNewsFeed() {
 
   useEffect(() => {
     async function fetchNews() {
-      const items = [];
+      let items = [];
 
-      // Strategy 1: Fetch MND Around the Web page via multiple CORS proxies
-      const mndUrl = "https://www.mortgagenewsdaily.com/aroundtheweb";
-      const proxies = [
-        "https://corsproxy.io/?" + encodeURIComponent(mndUrl),
-        "https://api.allorigins.win/raw?url=" + encodeURIComponent(mndUrl),
-        "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(mndUrl),
-      ];
-
-      for (const proxy of proxies) {
-        if (items.length > 0) break;
-        try {
-          const res = await fetch(proxy, { signal: AbortSignal.timeout(8000) });
-          if (!res.ok) continue;
-          const html = await res.text();
-          // Parse all article links - look for <a> tags with external URLs + source/time text
-          const linkRegex = /<a[^>]*href="(https?:\/\/(?!www\.mortgagenewsdaily)[^"]+)"[^>]*>([^<]+)<\/a>\s*([^<]*)/gi;
-          let m;
-          while ((m = linkRegex.exec(html)) !== null && items.length < 40) {
-            const link = m[1].trim();
-            const title = m[2].replace(/&amp;/g,"&").replace(/&#x27;/g,"'").replace(/&quot;/g,'"').trim();
-            const after = m[3].trim();
-            if (title.length < 15 || /share|facebook|twitter|linkedin|subscribe|newsletter|load more|close/i.test(title)) continue;
-            if (/\.(png|jpg|svg|gif|css|js)$/i.test(link)) continue;
-            const parts = after.split(/\s*-\s*/);
-            const source = parts[0]?.trim() || new URL(link).hostname.replace("www.","").split(".")[0];
-            const time = parts.slice(1).join(" - ").trim();
-            items.push({ title, link, source, time });
-          }
-        } catch(e) { /* try next proxy */ }
-      }
-
-      // Strategy 2: RSS fallback
-      if (items.length === 0) {
+      // Strategy 1: Server-side proxy (no CORS issues)
+      try {
+        const res = await fetch("/api/news", { signal: AbortSignal.timeout(10000) });
+        const data = await res.json();
+        if (data.items?.length) items = data.items;
+        else if (data.mndItems?.length) items = data.mndItems;
+      } catch(e) {
+        // Strategy 2: RSS fallback
         try {
           const rssRes = await fetch("https://api.rss2json.com/v1/api.json?rss_url=" + encodeURIComponent("https://www.mortgagenewsdaily.com/rss/news"), { signal: AbortSignal.timeout(6000) });
           const rssData = await rssRes.json();
@@ -84,7 +59,7 @@ const TradingViewNewsFeed = memo(function TradingViewNewsFeed() {
               items.push({ title: item.title, link: item.link, source: item.author || "MND", time: d.toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) });
             });
           }
-        } catch(e) {}
+        } catch(e2) {}
       }
 
       setArticles(items);
@@ -122,7 +97,7 @@ const TradingViewNewsFeed = memo(function TradingViewNewsFeed() {
       )}
       <div style={{padding:"6px 14px",fontSize:9,color:T.dark,borderTop:`1px solid ${T.border}`}}>
         <a href="https://www.mortgagenewsdaily.com/aroundtheweb" target="_blank" rel="noopener noreferrer" style={{color:T.hxTeal,textDecoration:"none"}}>Mortgage News Daily — Around the Web</a>
-        <span> · {articles.length > 0 ? `${articles.length} articles · ` : ""}Auto-refreshes every 5 min</span>
+        <span> · {articles.length > 0 ? `${articles.length} articles · ` : ""}Refreshes every 5 min</span>
       </div>
     </div>
   );
