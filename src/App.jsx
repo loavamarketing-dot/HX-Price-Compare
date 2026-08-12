@@ -148,6 +148,200 @@ function matchBand(val,keys,type){if(type==="ltv"){for(const k of keys){const n=
 
 function findLlpa(llpas,terms,ltvB){for(const t of terms)for(const[n,v]of Object.entries(llpas))if(n.toLowerCase().includes(t.toLowerCase())){const val=v[ltvB];if(val!=null)return{name:n,value:val};}return{name:null,value:0};}
 
+/* ═══════════════════════════════════════════════════════════════
+   HX ELIGIBILITY ENGINE
+   Checks HomeXpress-specific eligibility rules per the rate sheet
+   Company Adjustments. Returns { eligible, maxLtv, warnings[], reason }
+   ═══════════════════════════════════════════════════════════════ */
+function checkHxEligibility(p, product) {
+  const w = []; // warnings
+  let maxLtv = product === "dscr" ? 80 : 90;
+  const fico = parseInt(p.fico) || 720;
+  const ltv = parseInt(p.ltv) || 75;
+  const amt = parseInt(p.loanAmount) || 750000;
+  const purpose = p.purpose || "Purchase";
+  const isPurch = purpose === "Purchase";
+  const isRT = purpose.includes("Rate") || purpose.includes("R/T");
+  const isCO = purpose.includes("Cash");
+  const dscr = parseFloat(p.dscr) || 1.0;
+  const isIO = p.interestOnly === "Yes";
+  const isFN = p.foreignNational === "Yes";
+  const isSTR = p.str === "Yes";
+  const isCondotel = p.propertyType === "Condotel";
+  const isRural = p.rural === "Yes";
+  const isHighRise = p.propertyType === "High-Rise Condo";
+  const isCondo = p.propertyType === "Condo" || isHighRise;
+  const units = parseInt(p.units) || 1;
+  const hasPPP = p.ppp && p.ppp !== "None" && p.ppp !== "No Prepay";
+  const pppYears = hasPPP ? parseInt(p.ppp) || 0 : 0;
+  const hasLPC = p.lpc && parseFloat(p.lpc) > 0;
+  const is2ndHome = p.occupancy === "Second Home" || p.occupancy === "2nd Home";
+  const housing1x30 = p.housing1x30 === "Yes";
+
+  if (product === "consumer") {
+    // ═══ PRIMEX / PREMIERX ELIGIBILITY ═══
+
+    // Hard disqualifiers
+    if (fico < 660) return { eligible: false, maxLtv: 0, warnings: [], reason: "Min FICO 660" };
+    if (amt < 100000) return { eligible: false, maxLtv: 0, warnings: [], reason: "Min loan $100k" };
+    if (amt > 4000000) return { eligible: false, maxLtv: 0, warnings: [], reason: "Max loan $4.0MM" };
+    if (p.occupancy === "Investment" || p.occupancy === "Non-Owner") return { eligible: false, maxLtv: 0, warnings: [], reason: "Investment not eligible" };
+    if (isFN) return { eligible: false, maxLtv: 0, warnings: [], reason: "Foreign National not eligible" };
+    if (isCondotel) return { eligible: false, maxLtv: 0, warnings: [], reason: "Condotel not eligible" };
+    if (isSTR) return { eligible: false, maxLtv: 0, warnings: [], reason: "STR not eligible" };
+    if (p.incomeDoc === "DSCR") return { eligible: false, maxLtv: 0, warnings: [], reason: "DSCR doc not eligible" };
+
+    // Max LTV by purpose
+    if (isRT || isCO) maxLtv = Math.min(maxLtv, 85);
+    if (isCO) maxLtv = Math.min(maxLtv, 80);
+
+    // I/O cap
+    if (isIO) { maxLtv = Math.min(maxLtv, 85); if (units >= 2) return { eligible: false, maxLtv: 0, warnings: [], reason: "I/O: 2-4 Units not eligible" }; }
+
+    // Full/Alt Doc Purchase LTV matrix
+    if (isPurch) {
+      if (amt <= 1500000) { if (fico < 680) maxLtv = Math.min(maxLtv, 80); else if (fico < 700) maxLtv = Math.min(maxLtv, 85); }
+      if (amt > 1500000 && amt <= 2000000) { if (fico < 720) maxLtv = Math.min(maxLtv, 80); }
+      if (amt > 2000000 && amt <= 3000000) { maxLtv = Math.min(maxLtv, 80); if (fico < 720) maxLtv = Math.min(maxLtv, 80); if (fico < 700) maxLtv = Math.min(maxLtv, 75); }
+      if (amt > 2000000 && fico < 660) maxLtv = Math.min(maxLtv, 65);
+      if (amt > 3000000) { if (fico >= 700) maxLtv = Math.min(maxLtv, 65); else return { eligible: false, maxLtv: 0, warnings: [], reason: ">$3MM: FICO ≥700 required" }; }
+    }
+
+    // R/T Refi LTV matrix
+    if (isRT) {
+      if (amt <= 1500000) { if (fico < 680) maxLtv = Math.min(maxLtv, 80); }
+      if (amt > 1500000) maxLtv = Math.min(maxLtv, 80);
+      if (amt > 2000000 && amt <= 3000000 && fico < 700) maxLtv = Math.min(maxLtv, 75);
+      if (amt > 3000000) { if (fico >= 700) maxLtv = Math.min(maxLtv, 65); else return { eligible: false, maxLtv: 0, warnings: [], reason: ">$3MM R/T: FICO ≥700 required" }; }
+    }
+
+    // Cash-Out LTV matrix
+    if (isCO) {
+      if (amt <= 1500000 && fico < 680) maxLtv = Math.min(maxLtv, 75);
+      if (amt > 1500000 && amt <= 2000000) { if (fico < 720) maxLtv = Math.min(maxLtv, 80); if (fico < 700) maxLtv = Math.min(maxLtv, 75); }
+      if (amt > 2000000) { if (fico >= 720) maxLtv = Math.min(maxLtv, 80); else if (fico >= 700) maxLtv = Math.min(maxLtv, 75); else maxLtv = Math.min(maxLtv, 70); }
+      if (amt > 3000000) { if (fico >= 700) maxLtv = Math.min(maxLtv, 60); else return { eligible: false, maxLtv: 0, warnings: [], reason: ">$3MM C/O: FICO ≥700 required" }; }
+    }
+
+    // 2nd Home restrictions
+    if (is2ndHome) {
+      if (isPurch && fico < 700) maxLtv = Math.min(maxLtv, 80);
+      if (isPurch) maxLtv = Math.min(maxLtv, 85);
+      if (isRT) maxLtv = Math.min(maxLtv, 80);
+      if (isCO) maxLtv = Math.min(maxLtv, 75);
+    }
+
+    // Property restrictions
+    if (isHighRise) maxLtv = Math.min(maxLtv, 80);
+    if (isRural && isPurch) maxLtv = Math.min(maxLtv, 75);
+    if (isRural && (isRT || isCO)) maxLtv = Math.min(maxLtv, 70);
+    if (housing1x30) maxLtv = Math.min(maxLtv, 90);
+
+    // Warnings
+    if (ltv > 85) w.push("DTI capped at 45% when LTV > 85%");
+    if (amt > 2000000) w.push("6 months reserves required");
+
+  } else {
+    // ═══ INVESTORX DSCR ELIGIBILITY ═══
+
+    // FICO floors by DSCR
+    const minFico = dscr >= 0.75 ? 620 : 640;
+    if (fico < minFico) return { eligible: false, maxLtv: 0, warnings: [], reason: `Min FICO ${minFico} for DSCR ${dscr < 0.75 ? "<0.75" : "≥0.75"}` };
+
+    // Loan amount limits
+    const maxAmt = dscr < 0.75 ? 2000000 : 2500000;
+    const minAmt = isCondotel ? 150000 : (dscr < 0.75 ? 200000 : 100000);
+    if (amt < minAmt) return { eligible: false, maxLtv: 0, warnings: [], reason: `Min loan $${(minAmt/1000).toFixed(0)}k` };
+    if (amt > maxAmt) return { eligible: false, maxLtv: 0, warnings: [], reason: `Max loan $${(maxAmt/1000000).toFixed(1)}MM` };
+    if (amt > 2000000 && ltv > 70) maxLtv = Math.min(maxLtv, 70);
+
+    // Occupancy — investment only
+    if (p.occupancy !== "Investment" && p.occupancy !== "Non-Owner") return { eligible: false, maxLtv: 0, warnings: [], reason: "Investment property only" };
+
+    // Income doc restrictions
+    if (p.incomeDoc === "Bank Statement") return { eligible: false, maxLtv: 0, warnings: [], reason: "Bank Stmt not eligible for InvestorX" };
+
+    // LPC requires PPP
+    if (hasLPC && !hasPPP) return { eligible: false, maxLtv: 0, warnings: [], reason: "LPC requires prepay penalty" };
+
+    // DSCR < 1.0 caps
+    if (dscr < 1.0 && dscr >= 0.75) maxLtv = Math.min(maxLtv, 75);
+    if (dscr < 0.75) {
+      maxLtv = Math.min(maxLtv, 70);
+      if (isRural) return { eligible: false, maxLtv: 0, warnings: [], reason: "Rural not eligible for DSCR <0.75" };
+      w.push("DSCR <0.75: 0x30 housing only, 6 mo reserves");
+    }
+
+    // DSCR Purchase LTV matrix
+    if (isPurch && !isSTR && !isCondotel) {
+      if (amt <= 1500000) { if (fico < 700) maxLtv = Math.min(maxLtv, 75); if (fico < 680) maxLtv = Math.min(maxLtv, 70); if (fico < 660) maxLtv = Math.min(maxLtv, 70); }
+      if (amt > 1500000 && amt <= 2000000) { maxLtv = Math.min(maxLtv, 75); if (fico < 680) maxLtv = Math.min(maxLtv, 65); if (fico < 660) maxLtv = Math.min(maxLtv, 60); }
+      if (amt > 2000000) { maxLtv = Math.min(maxLtv, 70); if (fico < 680) maxLtv = Math.min(maxLtv, 65); w.push("≥$2MM: Min DSCR 1.0, Min FICO 660"); }
+    }
+
+    // DSCR R/T Refi LTV matrix
+    if (isRT && !isSTR && !isCondotel) {
+      if (amt <= 1500000) { if (fico < 700) maxLtv = Math.min(maxLtv, 75); if (fico < 680) maxLtv = Math.min(maxLtv, 70); if (fico < 660) maxLtv = Math.min(maxLtv, 70); }
+      if (amt > 1500000 && amt <= 2000000) { maxLtv = Math.min(maxLtv, 75); if (fico < 680) maxLtv = Math.min(maxLtv, 65); if (fico < 660) maxLtv = Math.min(maxLtv, 60); }
+      if (amt > 2000000) { maxLtv = Math.min(maxLtv, 70); if (fico < 680) maxLtv = Math.min(maxLtv, 65); }
+    }
+
+    // DSCR Cash-Out LTV matrix
+    if (isCO && !isSTR && !isCondotel) {
+      if (amt <= 1500000) { if (fico < 720) maxLtv = Math.min(maxLtv, 75); if (fico < 680) maxLtv = Math.min(maxLtv, 70); }
+      if (amt > 1500000 && amt <= 2000000) { maxLtv = Math.min(maxLtv, 75); if (fico < 680) maxLtv = Math.min(maxLtv, 65); if (fico < 660) maxLtv = Math.min(maxLtv, 60); }
+      if (amt > 2000000) { maxLtv = Math.min(maxLtv, 70); if (fico < 700) maxLtv = Math.min(maxLtv, 65); }
+    }
+
+    // No DSCR LTV matrix
+    if (dscr < 0.75) {
+      if (amt <= 1500000) { if (fico >= 720) maxLtv = Math.min(maxLtv, 70); else if (fico >= 700) maxLtv = Math.min(maxLtv, 65); else if (fico >= 680) maxLtv = Math.min(maxLtv, 60); else if (fico >= 660 && (isPurch || isRT)) maxLtv = Math.min(maxLtv, 55); else if (fico >= 660 && isCO) maxLtv = Math.min(maxLtv, 55); }
+      if (amt > 1500000 && amt <= 2000000) { if (fico >= 700) maxLtv = Math.min(maxLtv, 60); else if (fico >= 680) maxLtv = Math.min(maxLtv, 55); else maxLtv = Math.min(maxLtv, 50); }
+    }
+
+    // STR LTV matrix
+    if (isSTR) {
+      maxLtv = Math.min(maxLtv, 75);
+      if (fico < 620) return { eligible: false, maxLtv: 0, warnings: [], reason: "STR: Min FICO 620" };
+      if (amt <= 1500000) { if (fico < 660) maxLtv = Math.min(maxLtv, 70); }
+      if (amt > 1500000 && amt <= 2000000) { maxLtv = Math.min(maxLtv, 70); if (fico < 660) maxLtv = Math.min(maxLtv, 65); }
+      if (amt > 2000000 && amt <= 2500000) { maxLtv = Math.min(maxLtv, 65); if (fico < 660) return { eligible: false, maxLtv: 0, warnings: [], reason: "STR >$2MM: FICO ≥660 required" }; }
+    }
+
+    // Foreign National
+    if (isFN) {
+      if (p.incomeDoc !== "DSCR") return { eligible: false, maxLtv: 0, warnings: [], reason: "FN: DSCR doc only" };
+      if (isPurch) maxLtv = Math.min(maxLtv, 75);
+      if (isRT || isCO) maxLtv = Math.min(maxLtv, 70);
+      if (isCondotel) maxLtv = Math.min(maxLtv, 65);
+      w.push("FN: Must vest in LLC/Corp");
+    }
+
+    // Condotel
+    if (isCondotel) {
+      if (amt > 1500000) return { eligible: false, maxLtv: 0, warnings: [], reason: "Condotel: Max $1.5MM" };
+      if (isRT || isCO) maxLtv = Math.min(maxLtv, 65);
+    }
+
+    // Property caps
+    if (isHighRise) maxLtv = Math.min(maxLtv, 80);
+    if (isRural && isPurch) maxLtv = Math.min(maxLtv, 75);
+    if (isRural && (isRT || isCO)) maxLtv = Math.min(maxLtv, 70);
+    if (housing1x30) { maxLtv = Math.min(maxLtv, 75); if (fico < 700) return { eligible: false, maxLtv: 0, warnings: [], reason: "1x30 housing: FICO ≥700 required" }; }
+
+    // Reserves warnings
+    if (ltv > 65) w.push("3 months reserves required (LTV > 65%)");
+    if (amt > 1500000) w.push("6 months reserves required (>$1.5MM)");
+  }
+
+  // Final LTV check
+  if (ltv > maxLtv) {
+    return { eligible: false, maxLtv, warnings: w, reason: `LTV ${ltv}% exceeds max ${maxLtv}%` };
+  }
+
+  return { eligible: true, maxLtv, warnings: w, reason: "" };
+}
+
 function calcNet(lender,p){
   const adjs=[];const r={lender:lender.name,rate:p.rate,base:null,adjustments:adjs,totalAdj:0,net:null,ok:true,reason:""};
   const rk=Object.keys(lender.rates).map(Number).sort((a,b)=>Math.abs(a-p.rate)-Math.abs(b-p.rate))[0];
@@ -287,6 +481,7 @@ function exportPDF(results,matrix,buydown,config,params,lenders,view,hxN){
   const gap=hx?.ok&&best?.ok?(hx.net-best.net).toFixed(3):"N/A";
   const ts=new Date().toLocaleString();
   const allCats=[...new Set(results.flatMap(r=>r.adjustments?.map(a=>a.cat)||[]))];
+  const elig=checkHxEligibility(params,config===CONFIGS.dscr?"dscr":"consumer");
 
   // Narrative
   let narrative = "";
@@ -339,6 +534,11 @@ function exportPDF(results,matrix,buydown,config,params,lenders,view,hxN){
   </style></head><body>`;
 
   html+=`<h1>PRICING COMPARISON REPORT</h1><div class="sub">${config.label} · ${ts}</div>`;
+
+  // Eligibility
+  if(!elig.eligible) html+=`<div class="narrative" style="border-left-color:#cc2244;background:#fff0f2"><strong>⛔ HX INELIGIBLE:</strong> ${elig.reason}${elig.maxLtv>0?" (Max LTV: "+elig.maxLtv+"%)":""}</div>`;
+  else if(elig.warnings.length) html+=`<div class="narrative" style="border-left-color:#cc8800;background:#fff8e6"><strong>✓ HX ELIGIBLE</strong> — Max LTV: ${elig.maxLtv}%${elig.warnings.map(w=>" · ⚠ "+w).join("")}</div>`;
+  else html+=`<div class="narrative"><strong>✓ HX ELIGIBLE</strong> — Max LTV: ${elig.maxLtv}%</div>`;
 
   // Deal Summary
   if(narrative) html+=`<div class="narrative"><strong>Deal Summary:</strong> ${narrative}</div>`;
@@ -629,6 +829,7 @@ export default function App(){
   const onDragLeave=useCallback(e=>{e.preventDefault();e.stopPropagation();setDragging(false);},[]);
   const rates=useMemo(()=>lenders?[...new Set(Object.values(lenders).flatMap(l=>Object.keys(l.rates).map(Number)))].sort((a,b)=>a-b):[],[lenders]);
   const results=useMemo(()=>{if(!lenders)return[];const a=Object.values(lenders).map(l=>calcNet(l,params));const o=a.filter(r=>r.ok).sort((a,b)=>b.net-a.net);o.forEach((r,i)=>r.rank=i+1);return[...o,...a.filter(r=>!r.ok)];},[lenders,params]);
+  const hxElig=useMemo(()=>checkHxEligibility(params,activeProgram&&programs[activeProgram]?programs[activeProgram].product:product),[params,product,activeProgram,programs]);
   const matrix=useMemo(()=>{if(!lenders||view!=="matrix")return{};const m={};for(const ltv of config.ltvs)for(const fico of config.ficos){const p={...params,fico,ltv};const a=Object.values(lenders).map(l=>calcNet(l,p));const o=a.filter(r=>r.ok).sort((a,b)=>b.net-a.net);o.forEach((r,i)=>r.rank=i+1);m[`${ltv}_${fico}`]=[...o,...a.filter(r=>!r.ok)];}return m;},[lenders,params,view,config]);
   const buydown=useMemo(()=>lenders?calcBuydownAnalysis(lenders,params):null,[lenders,params]);
 
@@ -764,7 +965,7 @@ export default function App(){
             <div style={{border:`1px solid ${T.border}`,borderRadius:2,marginBottom:14,overflow:"hidden"}}>
               {[
                 {label:"LOAN",color:T.accent,fields:<><Sel l="Rate" v={params.rate} fn={v=>set("rate",+v)} opts={rates.map(r=>({v:r,l:r.toFixed(3)+"%"}))}/><Sel l="FICO" v={params.fico} fn={v=>set("fico",+v)} opts={config.ficos}/><Sel l="LTV" v={params.ltv} fn={v=>set("ltv",+v)} opts={config.ltvs.map(l=>({v:l,l:l+"%"}))}/><Inp l="Loan Amount" v={params.loanAmount} fn={v=>set("loanAmount",v)} ph="750000" w={115}/><Sel l="Lock" v={params.lock} fn={v=>set("lock",v)} opts={[{v:"15",l:"15 DAY"},{v:"30",l:"30 DAY"},{v:"45",l:"45 DAY"}]} w={80}/><Sel l="Purpose" v={params.purpose} fn={v=>set("purpose",v)} opts={["Purchase","Rate/Term Refi","Cash-Out"]}/></>},
-                {label:"PROPERTY",color:T.green,fields:<><Sel l="Type" v={params.propertyType} fn={v=>set("propertyType",v)} opts={["Single Family","Condo","PUD","2-4 Units"]}/><Sel l="Occupancy" v={params.occupancy} fn={v=>set("occupancy",v)} opts={product==="dscr"?["Investment","Non-Owner"]:["Primary","Second Home","Investment"]}/><Sel l="Units" v={params.units} fn={v=>set("units",v)} opts={["1","2","3-4"]} w={60}/><Tog l="Rural" v={params.rural} fn={v=>set("rural",v)}/>{product==="dscr"&&<Tog l="STR" v={params.str} fn={v=>set("str",v)}/>}</>},
+                {label:"PROPERTY",color:T.green,fields:<><Sel l="Type" v={params.propertyType} fn={v=>set("propertyType",v)} opts={product==="dscr"?["Single Family","Condo","High-Rise Condo","PUD","2-4 Units","Condotel"]:["Single Family","Condo","High-Rise Condo","PUD","2-4 Units"]}/><Sel l="Occupancy" v={params.occupancy} fn={v=>set("occupancy",v)} opts={product==="dscr"?["Investment","Non-Owner"]:["Primary","Second Home","Investment"]}/><Sel l="Units" v={params.units} fn={v=>set("units",v)} opts={["1","2","3-4"]} w={60}/><Tog l="Rural" v={params.rural} fn={v=>set("rural",v)}/>{product==="dscr"&&<Tog l="STR" v={params.str} fn={v=>set("str",v)}/>}<Tog l="1x30" v={params.housing1x30} fn={v=>set("housing1x30",v)}/></>},
                 {label:"BORROWER",color:T.orange,fields:<><Inp l="LPC" v={params.lpc} fn={v=>set("lpc",v)} ph="0.000" w={80}/><Sel l="Income Doc" v={params.incomeDoc} fn={v=>set("incomeDoc",v)} opts={product==="dscr"?["DSCR","Full Doc","Alt Doc","Asset Xpress","Bank Statement"]:["Bank Statement","Full Doc","Asset Xpress"]}/><Tog l="Self Emp" v={params.selfEmployed} fn={v=>set("selfEmployed",v)}/><Tog l="I/O" v={params.interestOnly} fn={v=>set("interestOnly",v)}/><Tog l="Impound" v={params.impoundWaiver} fn={v=>set("impoundWaiver",v)}/>{product==="dscr"&&<Tog l="Foreign" v={params.foreignNational} fn={v=>set("foreignNational",v)}/>}</>},
                 ...(product==="dscr"?[{label:"DSCR",color:T.purple,fields:<><Sel l="DSCR Ratio" v={params.dscr} fn={v=>set("dscr",v)} opts={["1.25","1.00","0.85","0.75","No DSCR"]}/><Sel l="Prepay Penalty" v={params.ppp} fn={v=>set("ppp",v)} opts={["5 Year","4 Year","3 Year","2 Year","1 Year","No Prepay","None"]}/></>}]:[]),
               ].map(({label,color,fields},i)=>(
@@ -788,6 +989,26 @@ export default function App(){
               <button onClick={()=>exportPDF(results,matrix,buydown,config,params,lenders,view,hxN)} style={{padding:"8px 16px",background:"transparent",color:T.accent,border:`1px solid ${T.accent}44`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ PDF REPORT</button>
               <button onClick={()=>exportXLSX(results,params,best)} style={{padding:"8px 16px",background:"transparent",color:T.muted,border:`1px solid ${T.border}`,borderRadius:2,cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1.5}}>⬇ XLSX</button>
             </div>
+
+            {/* HX ELIGIBILITY BANNER */}
+            {hxElig&&!hxElig.eligible&&(
+              <div style={{padding:"10px 16px",background:`${T.red}12`,border:`1px solid ${T.red}33`,borderLeft:`3px solid ${T.red}`,borderRadius:2,marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div><span style={{fontSize:11,fontWeight:700,color:T.red,letterSpacing:1}}>HX INELIGIBLE</span><span style={{fontSize:11,color:T.sub,marginLeft:10}}>{hxElig.reason}</span>{hxElig.maxLtv>0&&<span style={{fontSize:10,color:T.muted,marginLeft:10}}>Max LTV: {hxElig.maxLtv}%</span>}</div>
+              </div>
+            )}
+            {hxElig&&hxElig.eligible&&hxElig.warnings.length>0&&(
+              <div style={{padding:"8px 16px",background:`${T.amber}10`,border:`1px solid ${T.amber}33`,borderLeft:`3px solid ${T.amber}`,borderRadius:2,marginBottom:10,display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
+                <span style={{fontSize:10,fontWeight:700,color:T.amber,letterSpacing:1}}>ELIGIBLE</span>
+                <span style={{fontSize:10,color:T.amber,fontWeight:600}}>Max LTV: {hxElig.maxLtv}%</span>
+                {hxElig.warnings.map((w,i)=><span key={i} style={{fontSize:9,color:T.sub,borderLeft:`1px solid ${T.border}`,paddingLeft:10}}>⚠ {w}</span>)}
+              </div>
+            )}
+            {hxElig&&hxElig.eligible&&hxElig.warnings.length===0&&(
+              <div style={{padding:"8px 16px",background:`${T.green}08`,border:`1px solid ${T.green}22`,borderLeft:`3px solid ${T.green}`,borderRadius:2,marginBottom:10,display:"flex",gap:16,alignItems:"center"}}>
+                <span style={{fontSize:10,fontWeight:700,color:T.green,letterSpacing:1}}>HX ELIGIBLE</span>
+                <span style={{fontSize:10,color:T.green,fontWeight:600}}>Max LTV: {hxElig.maxLtv}%</span>
+              </div>
+            )}
 
             {/* KPIs */}
             {view!=="matrix"&&!showBuydown&&!showPar&&!showPar&&(
